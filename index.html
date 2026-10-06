@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Crosswind</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+  /* Layout: one full-screen cockpit — canvas fills the frame, HUD strip on top, overlay card for start/game over */
+  :root {
+    --night: #0b1424;      /* sky */
+    --panel: #121f35;      /* instrument panel */
+    --amber: #ffb23f;      /* cockpit amber — the one accent */
+    --ink: #e6edf7;        /* text */
+    --dim: #7f93b0;        /* secondary text */
+    --danger: #ff5a5f;     /* low fuel / crash */
+    --display: "Chakra Petch", "Trebuchet MS", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--night); color: var(--ink);
+    font-family: var(--mono); overflow: hidden;
+    -webkit-user-select: none; user-select: none; touch-action: none;
+  }
+  #game { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
+  .hud {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 2;
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px 10px;
+    display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
+    background: linear-gradient(var(--panel), transparent);
+    font-variant-numeric: tabular-nums; pointer-events: none;
+  }
+  .gauge { display: flex; flex-direction: column; gap: 2px; }
+  .gauge b { font-size: 11px; letter-spacing: .12em; color: var(--dim); font-weight: 400; }
+  .gauge span { font-size: 18px; font-weight: 600; color: var(--amber); }
+  .fuel { flex: 1; min-width: 140px; max-width: 260px; }
+  .bar { height: 8px; border: 1px solid var(--dim); border-radius: 2px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 100%; background: var(--amber); transition: width .1s linear; }
+  .bar.low i { background: var(--danger); }
+  .overlay {
+    position: fixed; inset: 0; z-index: 3; display: grid; place-items: center; padding: 16px;
+    background: color-mix(in srgb, var(--night) 70%, transparent);
+  }
+  .card {
+    max-width: 380px; width: 100%; padding: 28px 24px; text-align: left;
+    background: var(--panel); border: 1px solid #22355a; border-radius: 6px;
+    display: grid; gap: 14px;
+  }
+  .card h1 { margin: 0; font-family: var(--display); font-size: 40px; letter-spacing: .04em; color: var(--amber); line-height: 1; }
+  .card h2 { margin: 0; font-family: var(--display); font-size: 26px; color: var(--ink); }
+  .card p { margin: 0; color: var(--dim); line-height: 1.55; font-size: 13px; }
+  .card kbd { font-family: var(--mono); color: var(--ink); border: 1px solid #2c4470; border-radius: 3px; padding: 0 5px; }
+  .stats { display: flex; gap: 24px; font-variant-numeric: tabular-nums; }
+  .stats div { display: grid; gap: 2px; }
+  .stats b { font-size: 11px; color: var(--dim); letter-spacing: .12em; font-weight: 400; }
+  .stats span { font-size: 22px; color: var(--ink); font-weight: 600; }
+  button {
+    font: 700 16px var(--display); letter-spacing: .1em; text-transform: uppercase;
+    padding: 12px 18px; border: 0; border-radius: 4px; cursor: pointer;
+    background: var(--amber); color: #1a1205;
+  }
+  button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="Crosswind game area"></canvas>
+
+<div class="hud" aria-live="off">
+  <div class="gauge"><b>DIST NM</b><span id="dist">0.0</span></div>
+  <div class="gauge"><b>BEST NM</b><span id="best">0.0</span></div>
+  <div class="gauge fuel"><b>FUEL</b><div class="bar" id="fuelBar"><i id="fuelFill"></i></div></div>
+</div>
+
+<div class="overlay" id="start">
+  <div class="card">
+    <h1>CROSSWIND</h1>
+    <p>Fly through the storm. Steer around the lightning cells and pick up fuel cans before the tank runs dry. The storm gets faster the farther you go.</p>
+    <p>Steer with <kbd>↑</kbd> <kbd>↓</kbd> or <kbd>W</kbd> <kbd>S</kbd>. On a phone, drag up and down anywhere. <kbd>P</kbd> pauses.</p>
+    <button id="startBtn">Take off</button>
+  </div>
+</div>
+
+<div class="overlay" id="over" hidden>
+  <div class="card">
+    <h2 id="overTitle">Flight over</h2>
+    <p id="overReason"></p>
+    <div class="stats">
+      <div><b>DISTANCE</b><span id="finalDist">0.0 nm</span></div>
+      <div><b>BEST</b><span id="finalBest">0.0 nm</span></div>
+    </div>
+    <button id="againBtn">Fly again</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const cv = document.getElementById('game');
+  const ctx = cv.getContext('2d');
+  const $ = id => document.getElementById(id);
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let W = 0, H = 0, dpr = 1;
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    cv.width = W * dpr; cv.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  addEventListener('resize', resize); resize();
+
+  const load = k => { try { return parseFloat(localStorage.getItem(k)) || 0; } catch { return 0; } };
+  const save = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+
+  let best = load('crosswind-best');
+  $('best').textContent = best.toFixed(1);
+
+  // ---- state ----
+  let state = 'menu', plane, storms, cans, stars, rain, dist, fuel, speed, spawnT, canT, last, flash;
+  const keys = {};
+  let touchY = null;
+
+  function reset() {
+    plane = { x: Math.max(70, W * 0.18), y: H / 2, vy: 0, r: 16 };
+    storms = []; cans = [];
+    stars = Array.from({ length: 70 }, () => ({ x: Math.random() * W, y: Math.random() * H, s: Math.random() * 1.5 + 0.3 }));
+    rain = Array.from({ length: reduceMotion ? 0 : 90 }, () => ({ x: Math.random() * W, y: Math.random() * H, l: Math.random() * 12 + 6 }));
+    dist = 0; fuel = 100; speed = 220; spawnT = 0.6; canT = 2.5; flash = 0;
+  }
+
+  function start() {
+    reset(); state = 'play';
+    $('start').hidden = true; $('over').hidden = true;
+    last = performance.now();
+    cv.focus?.();
+  }
+
+  function end(reason) {
+    state = 'over';
+    if (dist > best) { best = dist; save('crosswind-best', best.toFixed(2)); }
+    $('best').textContent = best.toFixed(1);
+    $('overTitle').textContent = reason === 'fuel' ? 'Out of fuel' : 'Hit by lightning';
+    $('overReason').textContent = reason === 'fuel'
+      ? 'The engine quit. Grab the amber fuel cans sooner next time.'
+      : 'You flew into a storm cell. Give the flashing cells more room.';
+    $('finalDist').textContent = dist.toFixed(1) + ' nm';
+    $('finalBest').textContent = best.toFixed(1) + ' nm';
+    $('over').hidden = false;
+    $('againBtn').focus();
+  }
+
+  // ---- input ----
+  addEventListener('keydown', e => {
+    keys[e.key.toLowerCase()] = true;
+    if (['arrowup', 'arrowdown', ' '].includes(e.key.toLowerCase())) e.preventDefault();
+    if (e.key.toLowerCase() === 'p' && (state === 'play' || state === 'pause')) {
+      state = state === 'play' ? 'pause' : 'play'; last = performance.now();
+    }
+    if (e.key === 'Enter' && state !== 'play' && state !== 'pause') start();
+  });
+  addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+  cv.addEventListener('pointerdown', e => { touchY = e.clientY; });
+  cv.addEventListener('pointermove', e => { if (touchY !== null) touchY = e.clientY; });
+  addEventListener('pointerup', () => { touchY = null; });
+  $('startBtn').onclick = start;
+  $('againBtn').onclick = start;
+
+  // ---- spawning ----
+  function spawnStorm() {
+    const r = 22 + Math.random() * 30;
+    storms.push({ x: W + r, y: 60 + Math.random() * (H - 100), r, ph: Math.random() * 6, vy: (Math.random() - 0.5) * 40 });
+  }
+  function spawnCan() {
+    cans.push({ x: W + 20, y: 70 + Math.random() * (H - 120), bob: Math.random() * 6 });
+  }
+
+  // ---- update ----
+  function update(dt) {
+    // steering
+    let dir = 0;
+    if (keys['arrowup'] || keys['w']) dir -= 1;
+    if (keys['arrowdown'] || keys['s']) dir += 1;
+    if (touchY !== null) {
+      const d = touchY - plane.y;
+      dir = Math.max(-1, Math.min(1, d / 60));
+    }
+    plane.vy += dir * 1600 * dt;
+    plane.vy *= Math.pow(0.02, dt);              // drag
+    plane.y += plane.vy * dt;
+    const top = 70;
+    if (plane.y < top) { plane.y = top; plane.vy = 0; }
+    if (plane.y > H - 20) { plane.y = H - 20; plane.vy = 0; }
+
+    // progress
+    speed += 6 * dt;                               // storm speeds up
+    dist += speed * dt / 900;                      // ~nautical miles, arcade scale
+    fuel -= (6 + speed / 120) * dt;
+    if (fuel <= 0) { fuel = 0; return end('fuel'); }
+
+    spawnT -= dt;
+    if (spawnT <= 0) { spawnStorm(); spawnT = Math.max(0.35, 1.1 - speed / 900) * (0.6 + Math.random() * 0.8); }
+    canT -= dt;
+    if (canT <= 0) { spawnCan(); canT = 2.2 + Math.random() * 2; }
+
+    for (const s of storms) {
+      s.x -= speed * dt; s.y += s.vy * dt; s.ph += dt * 6;
+      if (s.y < 60 || s.y > H - 20) s.vy *= -1;
+      const dx = s.x - plane.x, dy = s.y - plane.y;
+      if (Math.hypot(dx, dy) < s.r * 0.78 + plane.r * 0.7) return end('storm');
+    }
+    for (const c of cans) {
+      c.x -= speed * dt; c.bob += dt * 4;
+      if (!c.got && Math.hypot(c.x - plane.x, c.y + Math.sin(c.bob) * 4 - plane.y) < 26) {
+        c.got = true; fuel = Math.min(100, fuel + 28); flash = 0.25;
+      }
+    }
+    storms = storms.filter(s => s.x > -s.r - 10);
+    cans = cans.filter(c => c.x > -30 && !c.got);
+
+    for (const st of stars) { st.x -= st.s * speed * 0.05 * dt; if (st.x < 0) { st.x = W; st.y = Math.random() * H; } }
+    for (const d of rain) { d.x -= speed * 1.4 * dt; d.y += 260 * dt; if (d.x < 0 || d.y > H) { d.x = Math.random() * W + 40; d.y = -10; } }
+    if (flash > 0) flash -= dt;
+  }
+
+  // ---- draw ----
+  function drawPlane(x, y, tilt) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(tilt);
+    ctx.fillStyle = '#e6edf7';
+    ctx.beginPath(); ctx.ellipse(0, 0, 22, 6, 0, 0, Math.PI * 2); ctx.fill();          // fuselage
+    ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(-12, -18); ctx.lineTo(-4, -18); ctx.lineTo(6, 0); ctx.closePath(); ctx.fill(); // wing
+    ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(-12, 18); ctx.lineTo(-4, 18); ctx.lineTo(6, 0); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-18, 0); ctx.lineTo(-24, -9); ctx.lineTo(-20, -9); ctx.lineTo(-14, 0); ctx.closePath(); ctx.fill(); // tail
+    ctx.fillStyle = '#ffb23f'; ctx.fillRect(10, -2, 6, 4);                              // cockpit
+    ctx.fillStyle = 'rgba(255,90,95,' + (0.5 + 0.5 * Math.sin(performance.now() / 120)) + ')';
+    ctx.beginPath(); ctx.arc(-11, -17, 2, 0, Math.PI * 2); ctx.fill();                 // nav light
+    ctx.restore();
+  }
+
+  function drawStorm(s) {
+    const g = ctx.createRadialGradient(s.x, s.y, s.r * 0.1, s.x, s.y, s.r);
+    g.addColorStop(0, '#5b6f95'); g.addColorStop(1, 'rgba(40,55,85,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#3a4c70';
+    for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(s.x + (i - 1) * s.r * 0.4, s.y + Math.sin(i * 2) * 4, s.r * 0.45, 0, Math.PI * 2); ctx.fill(); }
+    if (Math.sin(s.ph) > 0.85) {                                                       // lightning
+      ctx.strokeStyle = '#fff4c2'; ctx.lineWidth = 2; ctx.beginPath();
+      let lx = s.x, ly = s.y;
+      ctx.moveTo(lx, ly);
+      for (let i = 0; i < 4; i++) { lx += (Math.random() - 0.5) * 14; ly += s.r * 0.3; ctx.lineTo(lx, ly); }
+      ctx.stroke();
+    }
+  }
+
+  function drawCan(c) {
+    const y = c.y + Math.sin(c.bob) * 4;
+    ctx.save(); ctx.translate(c.x, y);
+    ctx.shadowColor = '#ffb23f'; ctx.shadowBlur = 14;
+    ctx.fillStyle = '#ffb23f'; ctx.fillRect(-8, -10, 16, 20);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#1a1205'; ctx.font = '700 9px "IBM Plex Mono", monospace'; ctx.textAlign = 'center';
+    ctx.fillText('JET', 0, 3);
+    ctx.fillRect(-3, -13, 6, 3);
+    ctx.restore();
+  }
+
+  function draw() {
+    ctx.fillStyle = '#0b1424'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#9fb3d1';
+    for (const st of stars) ctx.fillRect(st.x, st.y, st.s, st.s);
+    ctx.strokeStyle = 'rgba(159,179,209,.25)'; ctx.lineWidth = 1; ctx.beginPath();
+    for (const d of rain) { ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - d.l * 0.6, d.y + d.l); }
+    ctx.stroke();
+    for (const c of cans) drawCan(c);
+    for (const s of storms) drawStorm(s);
+    drawPlane(plane.x, plane.y, Math.max(-0.4, Math.min(0.4, plane.vy / 900)));
+    if (flash > 0) { ctx.fillStyle = `rgba(255,178,63,${flash})`; ctx.fillRect(0, 0, W, H); }
+    if (state === 'pause') {
+      ctx.fillStyle = 'rgba(11,20,36,.6)'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#ffb23f'; ctx.font = '700 32px "Chakra Petch", sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('PAUSED', W / 2, H / 2); ctx.font = '13px "IBM Plex Mono", monospace'; ctx.fillStyle = '#7f93b0';
+      ctx.fillText('Press P to resume', W / 2, H / 2 + 28);
+    }
+  }
+
+  function hud() {
+    $('dist').textContent = dist.toFixed(1);
+    $('fuelFill').style.width = fuel + '%';
+    $('fuelBar').classList.toggle('low', fuel < 25);
+  }
+
+  function loop(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (state === 'play') update(dt);
+    draw(); hud();
+    requestAnimationFrame(loop);
+  }
+
+  reset(); last = performance.now(); requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
