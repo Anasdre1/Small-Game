@@ -1,0 +1,53 @@
+rules_version = '2';
+
+// Crosswind leaderboard. One document per player at /scores/{uid}.
+// Players sign in anonymously; each can only write their own entry and can never lower their score.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedInAs(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function valid(d) {
+      return d.keys().hasOnly(['name', 'score', 'kills', 'dist', 'platform', 'ts'])
+        && d.keys().hasAll(['name', 'score', 'kills', 'dist', 'platform', 'ts'])
+        && d.name is string && d.name.matches('^[A-Za-z0-9 _-]{2,14}$')
+        && d.score is int && d.score >= 0 && d.score <= 500000
+        && d.kills is int && d.kills >= 0 && d.kills <= 5000
+        && (d.dist is int || d.dist is float) && d.dist >= 0 && d.dist <= 2000
+        // A run can't score more than its distance, kills and pickups allow.
+        && d.score <= d.dist * 40 + d.kills * 200 + 50
+        && d.platform in ['ios', 'android', 'web']
+        && d.ts == request.time;
+    }
+
+    match /scores/{uid} {
+      allow read: if true;
+      allow create: if signedInAs(uid) && valid(request.resource.data);
+      allow update: if signedInAs(uid) && valid(request.resource.data)
+        && request.resource.data.score >= resource.data.score
+        // Same score means a rename only: the run's numbers must not change.
+        && (request.resource.data.score > resource.data.score
+            || (request.resource.data.kills == resource.data.kills
+                && request.resource.data.dist == resource.data.dist
+                && request.resource.data.platform == resource.data.platform));
+      allow delete: if false;
+    }
+
+    // Players can flag an offensive name. Only you can read reports (in the Firebase console).
+    match /reports/{id} {
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['target', 'name', 'by', 'ts'])
+        && request.resource.data.target is string && request.resource.data.target.size() < 64
+        && request.resource.data.name is string && request.resource.data.name.size() <= 14
+        && request.resource.data.by == request.auth.uid
+        && request.resource.data.ts == request.time;
+      allow read, update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

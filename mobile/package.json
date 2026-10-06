@@ -1,0 +1,29 @@
+{
+  "name": "crosswind",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Crosswind for iOS and Android",
+  "scripts": {
+    "bundle": "esbuild src/app.js --bundle --minify --format=iife --target=es2020 --outfile=../crosswind-app.js",
+    "copy-web": "node scripts/copy-web.js",
+    "build": "npm run bundle && npm run copy-web",
+    "sync": "npm run build && npx cap sync",
+    "assets": "npx @capacitor/assets generate --iconBackgroundColor '#0b1424' --iconBackgroundColorDark '#0b1424' --splashBackgroundColor '#0b1424' --splashBackgroundColorDark '#0b1424'",
+    "android": "npm run sync && npx cap open android",
+    "ios": "npm run sync && npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.4",
+    "firebase": "^12.19.0"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/ios": "^8.5.2",
+    "esbuild": "^0.28.2"
+  }
+}

@@ -2,11 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b1424">
 <title>Crosswind</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <style>
+  @font-face { font-family: "Chakra Petch"; font-weight: 500; font-display: swap; src: url(fonts/chakra-petch-latin-500-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Chakra Petch"; font-weight: 700; font-display: swap; src: url(fonts/chakra-petch-latin-700-normal.woff2) format("woff2"); }
+  @font-face { font-family: "IBM Plex Mono"; font-weight: 400; font-display: swap; src: url(fonts/ibm-plex-mono-latin-400-normal.woff2) format("woff2"); }
+  @font-face { font-family: "IBM Plex Mono"; font-weight: 600; font-display: swap; src: url(fonts/ibm-plex-mono-latin-600-normal.woff2) format("woff2"); }
   /* Layout: one full-screen cockpit — canvas fills the frame, HUD strip on top, overlay card for start/game over */
   :root {
     --night: #0b1424;      /* sky */
@@ -29,7 +32,7 @@
   #game { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
   .hud {
     position: fixed; top: 0; left: 0; right: 0; z-index: 2;
-    padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px 10px;
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) calc(env(safe-area-inset-right, 0px) + 16px) 10px calc(env(safe-area-inset-left, 0px) + 16px);
     display: flex; gap: 18px; align-items: center; flex-wrap: wrap;
     background: linear-gradient(var(--panel), transparent);
     font-variant-numeric: tabular-nums; pointer-events: none;
@@ -73,6 +76,42 @@
     background: var(--amber); color: #1a1205;
   }
   button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+  button.ghost { background: transparent; color: var(--amber); border: 1px solid var(--amber); }
+  button:disabled { opacity: .4; cursor: default; }
+  .btnrow { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btnrow button { flex: 1; min-width: 130px; }
+  .pausebtn { pointer-events: auto; margin-left: auto; width: 40px; height: 40px; padding: 0; display: grid; place-items: center;
+    background: transparent; border: 1px solid #2c4470; color: var(--ink); font: 700 14px var(--mono); letter-spacing: 0; }
+  .submit { display: grid; gap: 8px; padding-top: 4px; border-top: 1px solid #22355a; }
+  .submit label { font-size: 11px; letter-spacing: .12em; color: var(--dim); }
+  .submit .line { display: flex; gap: 8px; }
+  .submit input { flex: 1; min-width: 0; font: 600 16px var(--mono); color: var(--ink); background: var(--night);
+    border: 1px solid #2c4470; border-radius: 4px; padding: 10px 12px; -webkit-user-select: text; user-select: text; }
+  .submit input:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
+  .submit button { padding: 10px 14px; font-size: 14px; }
+  .msg { font-size: 12.5px; color: var(--dim); min-height: 1.2em; }
+  .msg.err { color: var(--danger); }
+  .msg.good { color: #7ce38b; }
+  .cols, .intro { display: grid; gap: 14px; }
+  @media (max-height: 520px) {
+    .card { padding: 16px 20px; gap: 10px; max-height: calc(100% - 16px); }
+    #start .card { max-width: 760px; }
+    .card h1 { font-size: 30px; }
+    .intro { gap: 8px; }
+    .cols { grid-template-columns: 1.1fr 1fr; gap: 20px; align-items: start; }
+    .legend { gap: 5px 8px; font-size: 12px; }
+  }
+  #board { background: color-mix(in srgb, var(--night) 94%, transparent); }
+  .lb { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-variant-numeric: tabular-nums; }
+  .lb li { display: grid; grid-template-columns: 2.4em 1fr auto auto; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 3px; font-size: 14px; }
+  .lb li:nth-child(odd) { background: #0f1a2d; }
+  .lb li.me { background: color-mix(in srgb, var(--amber) 22%, transparent); }
+  .lb .rk { color: var(--dim); }
+  .lb .sc { color: var(--amber); font-weight: 600; }
+  .lb .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lb .flag { background: none; border: 0; color: var(--dim); padding: 2px 4px; font: 400 13px var(--mono); letter-spacing: 0; cursor: pointer; }
+  .lb .flag:hover { color: var(--danger); }
+  .lb .pf { color: var(--dim); font-size: 11px; margin-left: 6px; }
 </style>
 </head>
 <body>
@@ -84,13 +123,16 @@
   <div class="gauge"><b>HULL</b><div class="hull" id="hull"></div></div>
   <div class="gauge fuel"><b>FUEL</b><div class="bar" id="fuelBar"><i id="fuelFill"></i></div></div>
   <div class="powers" id="powers"></div>
+  <button class="pausebtn" id="pauseBtn" aria-label="Pause" hidden>II</button>
 </div>
 
 <div class="overlay" id="start">
   <div class="card">
     <h1>CROSSWIND</h1>
+    <div class="cols"><div class="intro">
     <p>Fly through the storm. Your guns fire on their own; shoot down raiders, dodge the lightning cells, and keep the fuel tank topped up. You can take 3 hits.</p>
-    <p>Steer with <kbd>↑</kbd> <kbd>↓</kbd> or <kbd>W</kbd> <kbd>S</kbd>. On a phone, drag up and down anywhere. <kbd>P</kbd> pauses.</p>
+    <p id="howto">Steer with <kbd>↑</kbd> <kbd>↓</kbd> or <kbd>W</kbd> <kbd>S</kbd>. On a phone, drag up and down anywhere. <kbd>P</kbd> pauses.</p>
+    </div>
     <div class="legend">
       <span class="tri"></span><span>Raiders, weavers and gunships. Gunships shoot back.</span>
       <span class="dot" style="background:#ffb23f">F</span><span>Fuel: refills the tank</span>
@@ -98,8 +140,11 @@
       <span class="dot" style="background:#b98cff">3</span><span>Spread shot: fire 3 ways for 8 seconds</span>
       <span class="dot" style="background:#7ce38b">R</span><span>Rapid fire for 8 seconds</span>
       <span class="dot" style="background:#ff8fa3">+</span><span>Repair: restores 1 hull point</span>
+    </div></div>
+    <div class="btnrow">
+      <button id="startBtn">Take off</button>
+      <button class="ghost" id="boardBtn">Leaderboard</button>
     </div>
-    <button id="startBtn">Take off</button>
   </div>
 </div>
 
@@ -113,9 +158,32 @@
       <div><b>KILLS</b><span id="finalKills">0</span></div>
       <div><b>DISTANCE</b><span id="finalDist">0 nm</span></div>
     </div>
-    <button id="againBtn">Fly again</button>
+    <form class="submit" id="submitForm" hidden>
+      <label for="nameInput">POST YOUR SCORE TO THE LEADERBOARD</label>
+      <div class="line">
+        <input id="nameInput" maxlength="14" autocomplete="nickname" autocapitalize="off" spellcheck="false" placeholder="Your name">
+        <button type="submit" id="submitBtn">Post</button>
+      </div>
+      <div class="msg" id="submitMsg"></div>
+    </form>
+    <div class="btnrow">
+      <button id="againBtn">Fly again</button>
+      <button class="ghost" id="overBoardBtn">Leaderboard</button>
+    </div>
   </div>
 </div>
+
+<div class="overlay" id="board" hidden>
+  <div class="card">
+    <h2>Leaderboard</h2>
+    <div class="msg" id="boardMsg">Loading…</div>
+    <ol class="lb" id="boardList"></ol>
+    <button class="ghost" id="boardClose">Back</button>
+  </div>
+</div>
+
+<script src="firebase-config.js"></script>
+<script src="crosswind-app.js"></script>
 
 <script>
 (() => {
@@ -170,16 +238,28 @@
   }
   const score = () => Math.floor(dist * 10) + bonus;
 
+  let lastRun = null;
+
   function start() {
     reset(); state = 'play';
-    $('start').hidden = true; $('over').hidden = true;
+    $('start').hidden = true; $('over').hidden = true; $('board').hidden = true;
+    $('pauseBtn').hidden = false;
     last = performance.now();
+  }
+
+  function setPaused(on) {
+    if (on && state === 'play') state = 'pause';
+    else if (!on && state === 'pause') { state = 'play'; last = performance.now(); }
+    $('pauseBtn').textContent = state === 'pause' ? '▶' : 'II';
+    $('pauseBtn').setAttribute('aria-label', state === 'pause' ? 'Resume' : 'Pause');
   }
 
   function end(reason) {
     state = 'over';
+    $('pauseBtn').hidden = true;
     const s = score();
     if (s > best) { best = s; save('crosswind-best-score', best); }
+    lastRun = { score: s, kills, dist, posted: false };
     $('best').textContent = best;
     $('overTitle').textContent = reason === 'fuel' ? 'Out of fuel' : 'Shot down';
     $('overReason').textContent = reason === 'fuel'
@@ -189,24 +269,106 @@
     $('finalBest').textContent = best;
     $('finalKills').textContent = kills;
     $('finalDist').textContent = dist.toFixed(1) + ' nm';
+    const lb = window.Leaderboard;
+    const canPost = lb && lb.enabled && s > 0;
+    $('submitForm').hidden = !canPost;
+    $('overBoardBtn').hidden = !(lb && lb.enabled);
+    if (canPost) {
+      $('nameInput').value = loadName();
+      $('submitBtn').disabled = false;
+      setMsg('submitMsg', '');
+    }
     $('over').hidden = false;
     $('againBtn').focus();
   }
 
+  // ---- leaderboard ----
+  const loadName = () => { try { return localStorage.getItem('crosswind-name') || ''; } catch { return ''; } };
+  const saveName = n => { try { localStorage.setItem('crosswind-name', n); } catch {} };
+  function setMsg(id, text, kind) { const el = $(id); el.textContent = text; el.className = 'msg' + (kind ? ' ' + kind : ''); }
+  const escapeHTML = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  $('submitForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!lastRun) return;
+    const lb = window.Leaderboard;
+    const check = lb.checkName($('nameInput').value);
+    if (!check.ok) return setMsg('submitMsg', check.error, 'err');
+    $('submitBtn').disabled = true;
+    setMsg('submitMsg', 'Posting…');
+    const r = await lb.submit({ name: check.name, score: lastRun.score, kills: lastRun.kills, dist: lastRun.dist });
+    if (r.ok) {
+      saveName(check.name);
+      lastRun.posted = true;
+      setMsg('submitMsg', r.improved ? `Posted. You're #${r.rank} worldwide.` : `Name updated. Your best of ${r.best} is #${r.rank} worldwide.`, 'good');
+    } else {
+      $('submitBtn').disabled = false;
+      setMsg('submitMsg', r.reason === 'name' ? r.error : "Couldn't reach the leaderboard. Check your connection and try again.", 'err');
+    }
+  });
+
+  async function openBoard() {
+    $('board').hidden = false;
+    $('boardList').innerHTML = '';
+    const lb = window.Leaderboard;
+    if (!lb || !lb.enabled) return setMsg('boardMsg', 'The online leaderboard is not set up yet. Your best score on this device is ' + best + '.');
+    setMsg('boardMsg', 'Loading…');
+    const r = await lb.top(25);
+    if (!r.ok) return setMsg('boardMsg', "Couldn't load the leaderboard. Check your connection and try again.", 'err');
+    if (!r.rows.length) return setMsg('boardMsg', 'No scores yet. Be the first on the board.');
+    setMsg('boardMsg', 'Top pilots on iPhone, Android and web.');
+    const pf = { ios: 'iOS', android: 'Android', web: 'Web' };
+    $('boardList').innerHTML = r.rows.map((row, i) =>
+      `<li class="${row.id === r.uid ? 'me' : ''}"><span class="rk">${i + 1}</span><span class="nm">${escapeHTML(row.name)}<span class="pf">${pf[row.platform] || ''}</span></span><span class="sc">${row.score}</span>${row.id === r.uid ? '<span></span>' : `<button class="flag" data-report="${escapeHTML(row.id)}" data-name="${escapeHTML(row.name)}" aria-label="Report the name ${escapeHTML(row.name)}" title="Report this name">⚑</button>`}</li>`).join('');
+  }
+  function closeBoard() { $('board').hidden = true; }
+  $('boardList').addEventListener('click', async e => {
+    const btn = e.target.closest('[data-report]');
+    if (!btn) return;
+    if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = 'Report?'; btn.style.color = 'var(--danger)'; return; }
+    btn.disabled = true;
+    const r = await window.Leaderboard.report(btn.dataset.report, btn.dataset.name);
+    btn.textContent = r.ok ? 'Sent' : 'Failed';
+    if (r.ok) setMsg('boardMsg', 'Thanks. That name will be reviewed and removed if it breaks the rules.', 'good');
+  });
+  $('boardBtn').onclick = openBoard;
+  $('overBoardBtn').onclick = openBoard;
+  $('boardClose').onclick = closeBoard;
+
   // ---- input ----
   addEventListener('keydown', e => {
+    if (e.target && e.target.tagName === 'INPUT') return;
     const k = e.key.toLowerCase();
     keys[k] = true;
     if (['arrowup', 'arrowdown', ' '].includes(k)) e.preventDefault();
-    if (k === 'p' && (state === 'play' || state === 'pause')) { state = state === 'play' ? 'pause' : 'play'; last = performance.now(); }
-    if (e.key === 'Enter' && state !== 'play' && state !== 'pause') start();
+    if (k === 'p') setPaused(state === 'play');
+    if (k === 'escape' && !$('board').hidden) closeBoard();
+    else if (e.key === 'Enter' && state !== 'play' && state !== 'pause' && $('board').hidden) start();
   });
   addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
-  cv.addEventListener('pointerdown', e => { touchY = e.clientY; });
+  cv.addEventListener('pointerdown', e => {
+    if (state === 'pause') { setPaused(false); return; }
+    touchY = e.clientY;
+  });
   cv.addEventListener('pointermove', e => { if (touchY !== null) touchY = e.clientY; });
   addEventListener('pointerup', () => { touchY = null; });
+  addEventListener('pointercancel', () => { touchY = null; });
   $('startBtn').onclick = start;
   $('againBtn').onclick = start;
+  $('pauseBtn').onclick = () => setPaused(state === 'play');
+
+  // Pause when the app or tab goes to the background; handle Android's back button.
+  document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); });
+  if (window.Native) {
+    window.Native.onPause = () => setPaused(true);
+    window.Native.onBack = () => {
+      if (!$('board').hidden) { closeBoard(); return true; }
+      if (state === 'play') { setPaused(true); return true; }
+      if (state === 'pause') { setPaused(false); return true; }
+      return false;
+    };
+    if (window.Native.isNative) $('howto').innerHTML = 'Drag up and down anywhere on the screen to steer. Tap <kbd>II</kbd> to pause.';
+  }
 
   // ---- spawning ----
   const rand = (a, b) => a + Math.random() * (b - a);
@@ -456,7 +618,7 @@
       ctx.fillStyle = 'rgba(11,20,36,.6)'; ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = '#ffb23f'; ctx.font = '700 32px "Chakra Petch", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
       ctx.fillText('PAUSED', W / 2, H / 2); ctx.font = '13px "IBM Plex Mono", monospace'; ctx.fillStyle = '#7f93b0';
-      ctx.fillText('Press P to resume', W / 2, H / 2 + 28);
+      ctx.fillText('Tap or press P to resume', W / 2, H / 2 + 28);
     }
   }
 
@@ -482,7 +644,7 @@
     requestAnimationFrame(loop);
   }
 
-  window.__cw = { get s() { return { state, hull, fuel, kills, enemies: enemies.length, pickups: pickups.length, score: score(), dist, powers }; }, give: t => collect({ type: t }) };
+  window.__cw = { get s() { return { state, hull, fuel, kills, enemies: enemies.length, onscreen: enemies.filter(e => e.x < W - 30 && e.x > plane.x + 80).length, pickups: pickups.length, score: score(), dist, powers }; }, give: t => collect({ type: t }) };
   reset(); last = performance.now(); requestAnimationFrame(loop);
 })();
 </script>

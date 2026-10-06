@@ -2,6 +2,8 @@
 
 Two small browser games. Each is a single HTML file, so there's nothing to install.
 
+Crosswind is also packaged as an iPhone/iPad and Android app with a worldwide online leaderboard. See [`mobile/PUBLISHING.md`](mobile/PUBLISHING.md) for how to turn on the leaderboard and publish to the App Store and Google Play.
+
 ## Crosswind — `index.html`
 
 Fly a plane through a storm. Your guns fire automatically: shoot down enemy aircraft, dodge the lightning cells, and keep your fuel up. You can take 3 hits.
@@ -18,7 +20,7 @@ Fly a plane through a storm. Your guns fire automatically: shoot down enemy airc
 - Rapid fire (R): fires much faster for 8 seconds.
 - Repair (+): restores 1 hull point.
 
-Score comes from distance, kills and pickups.
+Score comes from distance, kills and pickups. After a run you can post your best score to the online leaderboard under a nickname (once Firebase is set up; see `mobile/PUBLISHING.md`).
 
 | Action | Keyboard | Phone / tablet |
 |---|---|---|
@@ -42,4 +44,4 @@ All card names and art are original.
 
 ## Play online
 
-Turn on GitHub Pages (Settings → Pages → Deploy from branch → `main` / root). Crosswind is at the site root and Relic Duel is at `/duel/`.
+Turn on GitHub Pages (Settings → Pages → Deploy from branch → `main` / root). Crosswind is at the site root, Relic Duel is at `/duel/`, and the app privacy policy is at `/privacy.html`.
