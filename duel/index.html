@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Relic Duel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Barlow+Condensed:wght@500;700&family=Barlow:wght@400;600&display=swap">
+<style>
+  /* Layout: a duel mat — opponent's half on top, yours on the bottom, life points and phase controls across the middle */
+  :root {
+    --bg: #0f1219;        /* arena */
+    --mat: #161c28;       /* duel mat */
+    --zone: #1e2738;      /* empty zone */
+    --line: #2b3850;      /* zone borders */
+    --gold: #d8b45a;      /* accent: relic gold */
+    --ink: #ecebe4;
+    --dim: #8b94a7;
+    --red: #e0574d;
+    --spell: #2a9d8f;
+    --trap: #b5487a;
+    --display: "Cinzel", Georgia, serif;
+    --label: "Barlow Condensed", "Arial Narrow", sans-serif;
+    --body: "Barlow", system-ui, sans-serif;
+    --cw: min(13.5vw, 9.4vh, 86px);
+    --ch: calc(var(--cw) * 1.45);
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  [hidden] { display: none !important; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); overflow: hidden; -webkit-tap-highlight-color: transparent; }
+  #app { height: 100%; display: flex; flex-direction: column; padding: calc(env(safe-area-inset-top,0px) + 6px) 12px calc(env(safe-area-inset-bottom,0px) + 6px); gap: 6px; max-width: 760px; margin: 0 auto; }
+
+  .side { display: flex; flex-direction: column; gap: 6px; }
+  .row { display: grid; grid-template-columns: repeat(5, var(--cw)) var(--cw); gap: clamp(4px, 1.4vw, 10px); justify-content: center; }
+  .zone { width: var(--cw); height: var(--ch); border: 1px dashed var(--line); border-radius: 5px; background: var(--zone); display: grid; place-items: center; position: relative; }
+  .zone.mz { border-style: solid; }
+  .pile { width: var(--cw); height: var(--ch); border-radius: 5px; display: grid; place-items: center; text-align: center; font: 600 calc(var(--cw)*.14) var(--label); color: var(--dim); letter-spacing: .06em; border: 1px solid var(--line); background: var(--mat); cursor: pointer; }
+  .pile b { display: block; font-size: calc(var(--cw)*.3); color: var(--ink); }
+  .pile.deck { background: repeating-linear-gradient(45deg, #2a2440 0 6px, #231e36 6px 12px); }
+
+  .card { width: var(--cw); height: calc(var(--cw) * 1.45); border-radius: 5px; position: relative; overflow: hidden; cursor: pointer;
+    display: flex; flex-direction: column; padding: calc(var(--cw)*.05); gap: calc(var(--cw)*.03);
+    background: linear-gradient(160deg, color-mix(in srgb, var(--c) 55%, #1a1a1a), color-mix(in srgb, var(--c) 25%, #0c0c0c));
+    border: 2px solid color-mix(in srgb, var(--c) 70%, #fff 10%); box-shadow: 0 2px 6px #0008; transition: transform .15s; }
+  .card .nm { font: 700 calc(var(--cw)*.12) var(--label); line-height: 1.05; letter-spacing: .02em; min-height: 2.1em; }
+  .card .lv { color: var(--gold); font-size: calc(var(--cw)*.1); letter-spacing: -.05em; line-height: 1; }
+  .card .art { flex: 1; border-radius: 3px; background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--c) 80%, #fff 20%), color-mix(in srgb, var(--c) 30%, #000) 70%); display: grid; place-items: center; font: 800 calc(var(--cw)*.28) var(--display); color: #0006; }
+  .card .st { font: 700 calc(var(--cw)*.11) var(--label); display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+  .card .st .up { color: #9be27a; }
+  .card .ty { font: 700 calc(var(--cw)*.1) var(--label); letter-spacing: .1em; text-transform: uppercase; opacity: .85; }
+  .card.back { --c: #3a2f5c; background: repeating-linear-gradient(45deg, #2f2650 0 6px, #271f44 6px 12px); border-color: #4a3d78; }
+  .card.back::after { content: ""; position: absolute; inset: 22% 18%; border: 2px solid #6e5ca8; border-radius: 50%; }
+  .zone .card.def { transform: rotate(90deg) scale(.69); }
+  .card.pick { outline: 3px solid var(--gold); outline-offset: 2px; animation: pulse 1s infinite alternate; }
+  .zone.pick { outline: 3px solid var(--gold); outline-offset: 2px; }
+  .card.done { opacity: .55; }
+  @keyframes pulse { to { outline-color: #fff2; } }
+  @media (prefers-reduced-motion: reduce) { .card.pick { animation: none; } }
+
+  .hand { display: flex; gap: 6px; overflow-x: auto; padding: 4px 2px; min-height: calc(var(--ch) + 8px); justify-content: safe center; }
+  .hand .card { flex: none; }
+  .hand .card:hover { transform: translateY(-4px); }
+  .opp-hand { display: flex; gap: 3px; justify-content: center; min-height: calc(var(--ch) * .38); }
+  .opp-hand .card { --cw: calc(min(13.5vw, 9.4vh, 86px) * .38); cursor: default; }
+
+  .mid { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; padding: 6px 4px; border-block: 1px solid var(--line); }
+  .lp { display: grid; gap: 1px; font-variant-numeric: tabular-nums; }
+  .lp small { font: 600 11px var(--label); letter-spacing: .12em; color: var(--dim); text-transform: uppercase; }
+  .lp span { font: 800 clamp(18px, 4.5vw, 26px) var(--display); color: var(--gold); }
+  .lp.right { text-align: right; }
+  .lp.hurt span { color: var(--red); }
+  .center { display: grid; gap: 4px; justify-items: center; text-align: center; }
+  .phase { font: 700 12px var(--label); letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+  .phase b { color: var(--ink); }
+  .btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+  button { font: 700 13px var(--label); letter-spacing: .08em; text-transform: uppercase; border-radius: 4px; padding: 8px 12px; cursor: pointer; border: 1px solid var(--gold); background: transparent; color: var(--gold); }
+  button.primary { background: var(--gold); color: #1b1405; }
+  button:disabled { opacity: .35; cursor: default; }
+  button:focus-visible, .card:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .status { font-size: 12.5px; color: var(--dim); min-height: 1.3em; max-width: 46ch; text-align: center; margin: 0 auto; }
+  .status.sel { color: var(--gold); font-weight: 600; }
+
+  .overlay { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 16px; background: #05070bcc; }
+  .sheet { width: 100%; max-width: 380px; background: var(--mat); border: 1px solid var(--line); border-radius: 8px; padding: 20px; display: grid; gap: 12px; max-height: 85vh; overflow: auto; }
+  .sheet h2 { margin: 0; font: 800 20px var(--display); color: var(--gold); }
+  .sheet .who { font: 700 12px var(--label); letter-spacing: .14em; text-transform: uppercase; color: var(--red); }
+  .sheet p { margin: 0; color: var(--dim); line-height: 1.5; font-size: 14px; }
+  .sheet .detail { display: flex; gap: 14px; align-items: flex-start; }
+  .sheet .detail .card { --cw: 96px; flex: none; cursor: default; }
+  .sheet .acts { display: grid; gap: 8px; }
+  .sheet .acts button { padding: 11px; font-size: 14px; }
+  .sheet ol { margin: 0; padding-left: 20px; color: var(--dim); font-size: 13px; line-height: 1.6; }
+  .cover { background: radial-gradient(circle at 50% 40%, #2a2147, var(--bg) 70%); }
+  .cover .sheet { text-align: center; justify-items: center; background: transparent; border: 0; }
+  .cover h1 { margin: 0; font: 800 clamp(30px, 8vw, 46px) var(--display); color: var(--gold); letter-spacing: .04em; }
+  .rules { text-align: left; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+(() => {
+"use strict";
+
+// ---------- cards ----------
+const ATTR = { FIRE: "#d9603b", WATER: "#3a86cc", EARTH: "#987a4c", WIND: "#43ad80", LIGHT: "#d9bf5a", DARK: "#8357c2" };
+const M = (name, attr, level, atk, def) => ({ name, kind: "monster", attr, level, atk, def });
+const S = (name, effect, text) => ({ name, kind: "spell", effect, text });
+const T = (name, effect, text) => ({ name, kind: "trap", effect, text });
+const POOL = {
+  whelp: M("Ember Whelp", "FIRE", 2, 800, 600),
+  imp: M("Spark Imp", "FIRE", 1, 500, 300),
+  ogre: M("Cinder Ogre", "FIRE", 4, 1800, 600),
+  squire: M("Tidecaller Squire", "WATER", 3, 1100, 900),
+  reef: M("Reef Sentinel", "WATER", 4, 1200, 1700),
+  levi: M("Abyssal Leviathan", "WATER", 7, 2700, 2000),
+  tort: M("Mossback Tortoise", "EARTH", 3, 600, 1800),
+  ent: M("Ironbark Ent", "EARTH", 2, 400, 2000),
+  golem: M("Granite Golem", "EARTH", 5, 1900, 2200),
+  kestrel: M("Gale Kestrel", "WIND", 4, 1500, 1000),
+  harrier: M("Storm Harrier", "WIND", 6, 2300, 1500),
+  acolyte: M("Lantern Acolyte", "LIGHT", 4, 1400, 1200),
+  paladin: M("Sunforged Paladin", "LIGHT", 6, 2400, 1600),
+  stalker: M("Gloom Stalker", "DARK", 4, 1700, 800),
+  witch: M("Nightveil Witch", "DARK", 5, 2100, 1400),
+  wyrm: M("Obsidian Wyrm", "DARK", 8, 3000, 2500),
+  archive: S("Old Archive", "draw2", "Draw 2 cards."),
+  wind: S("Second Wind", "heal", "Gain 1000 Life Points."),
+  shot: S("Ember Shot", "burn", "Deal 800 damage to your opponent."),
+  bolt: S("Shatterbolt", "destroyOne", "Destroy 1 monster your opponent controls."),
+  verdict: S("Thunder Verdict", "destroyAll", "Destroy every monster your opponent controls."),
+  edge: S("Iron Edge", "equip", "One face-up monster you control gains 500 ATK permanently."),
+  rite: S("Revive Rite", "revive", "Summon 1 monster from your graveyard in Attack Position."),
+  mirror: T("Mirror Ward", "mirror", "When an opponent's monster declares an attack: destroy that monster."),
+  still: T("Stillwind", "negate", "When an opponent's monster declares an attack: stop the attack and end the Battle Phase."),
+  pit: T("Pitfall Snare", "pit", "When your opponent summons a monster with 1000 or more ATK: destroy it."),
+};
+const DECK = ["whelp","whelp","imp","ogre","squire","squire","reef","levi","tort","ent","golem","kestrel","kestrel","harrier","acolyte","paladin","stalker","stalker","witch","wyrm",
+  "archive","wind","shot","bolt","verdict","edge","rite","mirror","still","pit"];
+const HAND_LIMIT = 6;
+let UID = 0;
+
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const tributesFor = lv => lv >= 7 ? 2 : lv >= 5 ? 1 : 0;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// ---------- state ----------
+let G;
+const ME = () => G.players[G.cur];
+const OPP = () => G.players[1 - G.cur];
+const mkPlayer = name => ({ name, lp: 8000, deck: shuffle(DECK.map(k => ({ ...POOL[k], uid: ++UID }))), hand: [], mz: Array(5).fill(null), sz: Array(5).fill(null), gy: [] });
+
+function newGame() {
+  G = { players: [mkPlayer("Player 1"), mkPlayer("Player 2")], cur: 0, turn: 0, phase: "main1", summoned: false,
+        log: [], sel: null, sheet: null, cover: null, winner: null };
+  G.players.forEach(p => draw(p, 5, true));
+  beginTurn();
+  G.cover = { title: "Player 1 goes first", text: "Player 2, look away. Player 1, tap when you're ready.", rules: true };
+  render();
+}
+
+function log(msg) { G.log.push(msg); if (G.log.length > 80) G.log.shift(); }
+function draw(p, n, quiet) {
+  for (let i = 0; i < n; i++) {
+    if (!p.deck.length) { if (!quiet) log(`${p.name} has no cards left to draw.`); return false; }
+    p.hand.push(p.deck.pop());
+  }
+  return true;
+}
+const firstEmpty = arr => arr.findIndex(x => !x);
+
+function beginTurn() {
+  G.turn++; G.summoned = false; G.phase = "main1"; G.sel = null;
+  const me = ME();
+  me.mz.forEach(m => m && (m.attacked = false, m.posChanged = false));
+  if (G.turn > 1) {
+    if (!me.deck.length) return win(1 - G.cur, `${me.name} couldn't draw a card.`);
+    draw(me, 1);
+  }
+  log(`— Turn ${G.turn}: ${me.name} —`);
+}
+
+function endTurn() {
+  const me = ME();
+  if (me.hand.length > HAND_LIMIT) {
+    const extra = me.hand.length - HAND_LIMIT;
+    G.sel = { prompt: `Hand limit is ${HAND_LIMIT}. Discard ${extra} card${extra > 1 ? "s" : ""}.`, count: extra, picks: [], cancel: false,
+      pickable: r => r.side === "me" && r.area === "hand",
+      done: picks => {
+        picks.map(r => me.hand[r.i]).forEach(c => { me.hand.splice(me.hand.indexOf(c), 1); me.gy.push(c); log(`${me.name} discards ${c.name}.`); });
+        endTurn();
+      } };
+    return render();
+  }
+  G.cur = 1 - G.cur;
+  beginTurn();
+  if (!G.winner) G.cover = { title: `${ME().name}'s turn`, text: `${OPP().name}, pass the device and look away. ${ME().name}, tap when you're ready.` };
+  render();
+}
+
+function win(i, why) { G.winner = { i, why }; log(`${G.players[i].name} wins. ${why}`); render(); }
+function checkLP() {
+  for (let i = 0; i < 2; i++) if (G.players[i].lp <= 0) { G.players[i].lp = 0; win(1 - i, `${G.players[i].name}'s Life Points hit 0.`); return true; }
+  return false;
+}
+function damage(p, n) { p.lp -= n; log(`${p.name} takes ${n} damage.`); }
+
+function destroyMonster(p, i, why = "destroyed") {
+  const m = p.mz[i]; if (!m) return;
+  p.mz[i] = null; p.gy.push(stripCard(m.card)); log(`${m.faceUp ? m.card.name : "A face-down monster"} (${p.name}) is ${why}.`);
+}
+const stripCard = c => ({ ...c });
+const atkOf = m => m.card.atk + (m.bonus || 0);
+
+// ---------- summoning ----------
+function summon(card, mode) {
+  const me = ME(), need = tributesFor(card.level);
+  const place = () => {
+    const z = firstEmpty(me.mz);
+    me.hand.splice(me.hand.indexOf(card), 1);
+    me.mz[z] = { card, pos: mode === "set" ? "def" : "atk", faceUp: mode !== "set", summonTurn: G.turn, posChanged: false, attacked: false, bonus: 0 };
+    G.summoned = true;
+    log(mode === "set" ? `${me.name} sets a monster face-down.` : `${me.name} summons ${card.name} (ATK ${card.atk}).`);
+    if (mode !== "set") checkPitfall(z);
+    render();
+  };
+  if (!need) return place();
+  G.sel = { prompt: `Tribute ${need} monster${need > 1 ? "s" : ""} to summon ${card.name}.`, count: need, picks: [], cancel: true,
+    pickable: r => r.side === "me" && r.area === "mz" && me.mz[r.i],
+    done: picks => { picks.forEach(r => destroyMonster(me, r.i, "tributed")); place(); } };
+  render();
+}
+
+function checkPitfall(z) {
+  const me = ME(), opp = OPP(), m = me.mz[z];
+  if (!m || atkOf(m) < 1000) return;
+  const ti = opp.sz.findIndex(s => s && s.card.effect === "pit" && s.setTurn < G.turn);
+  if (ti < 0) return;
+  G.sheet = { who: opp.name, title: "Spring a trap?", text: `${me.name} summoned ${m.card.name} with ${atkOf(m)} ATK. You have Pitfall Snare set.`, noCancel: true,
+    actions: [
+      { label: "Activate Pitfall Snare", primary: true, fn: () => { useTrap(opp, ti); destroyMonster(me, z); } },
+      { label: "Don't activate", fn: () => {} } ] };
+}
+
+function useTrap(p, i) { const s = p.sz[i]; p.sz[i] = null; p.gy.push(s.card); log(`${p.name} activates ${s.card.name}!`); }
+
+// ---------- spells ----------
+function canActivate(c) {
+  const me = ME(), opp = OPP();
+  switch (c.effect) {
+    case "destroyOne": case "destroyAll": return opp.mz.some(Boolean);
+    case "equip": return me.mz.some(m => m && m.faceUp);
+    case "revive": return me.gy.some(x => x.kind === "monster") && firstEmpty(me.mz) >= 0;
+    default: return true;
+  }
+}
+
+function activateSpell(card, from) {
+  const me = ME(), opp = OPP();
+  const consume = () => {
+    if (from.area === "hand") me.hand.splice(me.hand.indexOf(card), 1); else me.sz[from.i] = null;
+    me.gy.push(card); log(`${me.name} activates ${card.name}.`);
+  };
+  switch (card.effect) {
+    case "draw2": consume(); draw(me, 2); break;
+    case "heal": consume(); me.lp += 1000; log(`${me.name} gains 1000 Life Points.`); break;
+    case "burn": consume(); damage(opp, 800); checkLP(); break;
+    case "destroyAll": consume(); opp.mz.forEach((m, i) => m && destroyMonster(opp, i)); break;
+    case "destroyOne":
+      G.sel = { prompt: "Choose an opponent's monster to destroy.", count: 1, picks: [], cancel: true,
+        pickable: r => r.side === "opp" && r.area === "mz" && opp.mz[r.i],
+        done: ([r]) => { consume(); destroyMonster(opp, r.i); render(); } };
+      break;
+    case "equip":
+      G.sel = { prompt: "Choose your face-up monster to gain 500 ATK.", count: 1, picks: [], cancel: true,
+        pickable: r => r.side === "me" && r.area === "mz" && me.mz[r.i] && me.mz[r.i].faceUp,
+        done: ([r]) => { consume(); me.mz[r.i].bonus += 500; log(`${me.mz[r.i].card.name} gains 500 ATK.`); render(); } };
+      break;
+    case "revive": {
+      const options = me.gy.filter(x => x.kind === "monster");
+      G.sheet = { title: "Revive Rite", text: "Choose a monster from your graveyard.", actions: options.map(c => ({
+        label: `${c.name} · ATK ${c.atk}`, fn: () => {
+          consume(); me.gy.splice(me.gy.indexOf(c), 1);
+          const z = firstEmpty(me.mz);
+          me.mz[z] = { card: c, pos: "atk", faceUp: true, summonTurn: G.turn, posChanged: false, attacked: false, bonus: 0 };
+          log(`${c.name} returns to the field.`);
+        } })) };
+      break;
+    }
+  }
+  render();
+}
+
+function setCard(card) {
+  const me = ME(), z = firstEmpty(me.sz);
+  me.hand.splice(me.hand.indexOf(card), 1);
+  me.sz[z] = { card, setTurn: G.turn };
+  log(`${me.name} sets a card in the spell & trap zone.`);
+  render();
+}
+
+// ---------- battle ----------
+const canAttack = m => G.phase === "battle" && G.turn > 1 && m && m.faceUp && m.pos === "atk" && !m.attacked;
+
+function startAttack(ai) {
+  const opp = OPP();
+  if (!opp.mz.some(Boolean)) return declareAttack(ai, null);
+  G.sel = { prompt: "Choose a monster to attack.", count: 1, picks: [], cancel: true,
+    pickable: r => r.side === "opp" && r.area === "mz" && opp.mz[r.i],
+    done: ([r]) => declareAttack(ai, r.i) };
+  render();
+}
+
+function declareAttack(ai, ti) {
+  const me = ME(), opp = OPP(), a = me.mz[ai];
+  a.attacked = true;
+  log(`${a.card.name} attacks ${ti === null ? opp.name + " directly" : (opp.mz[ti].faceUp ? opp.mz[ti].card.name : "a face-down monster")}.`);
+  const traps = opp.sz.map((s, i) => ({ s, i })).filter(({ s }) => s && s.card.kind === "trap" && (s.card.effect === "mirror" || s.card.effect === "negate") && s.setTurn < G.turn);
+  if (!traps.length) { resolveBattle(ai, ti); return render(); }
+  G.sheet = { who: opp.name, title: "Spring a trap?", text: `${a.card.name} (ATK ${atkOf(a)}) is attacking ${ti === null ? "you directly" : "your monster"}.`, noCancel: true,
+    actions: [
+      ...traps.map(({ s, i }) => ({ label: `Activate ${s.card.name}`, primary: true, fn: () => {
+        useTrap(opp, i);
+        if (s.card.effect === "mirror") destroyMonster(me, ai);
+        else { log("The attack is stopped and the Battle Phase ends."); G.phase = "main2"; }
+      } })),
+      { label: "Don't activate", fn: () => resolveBattle(ai, ti) } ] };
+  render();
+}
+
+function resolveBattle(ai, ti) {
+  const me = ME(), opp = OPP(), a = me.mz[ai];
+  if (!a) return;
+  const atk = atkOf(a);
+  if (ti === null) { damage(opp, atk); return void checkLP(); }
+  const t = opp.mz[ti];
+  if (!t.faceUp) { t.faceUp = true; log(`The face-down monster is ${t.card.name} (DEF ${t.card.def}).`); }
+  if (t.pos === "atk") {
+    const tAtk = atkOf(t);
+    if (atk > tAtk) { destroyMonster(opp, ti); damage(opp, atk - tAtk); }
+    else if (atk < tAtk) { destroyMonster(me, ai); damage(me, tAtk - atk); }
+    else { destroyMonster(opp, ti); destroyMonster(me, ai); }
+  } else {
+    const def = t.card.def;
+    if (atk > def) destroyMonster(opp, ti);
+    else if (atk < def) damage(me, def - atk);
+    else log("Neither monster is destroyed.");
+  }
+  checkLP();
+}
+
+// ---------- menus ----------
+function openHandCard(i) {
+  const me = ME(), c = me.hand[i], main = G.phase === "main1" || G.phase === "main2";
+  const acts = [];
+  if (c.kind === "monster") {
+    const need = tributesFor(c.level), mons = me.mz.filter(Boolean).length;
+    const room = need ? mons >= need : firstEmpty(me.mz) >= 0;
+    const why = !main ? "Main Phase only" : G.summoned ? "Already summoned this turn" : !room ? (need ? `Needs ${need} tribute${need > 1 ? "s" : ""}` : "No free monster zone") : "";
+    acts.push({ label: `Summon in Attack${need ? ` (${need} tribute${need > 1 ? "s" : ""})` : ""}`, primary: true, disabled: !!why, note: why, fn: () => summon(c, "atk") });
+    acts.push({ label: `Set face-down in Defense${need ? ` (${need} tribute${need > 1 ? "s" : ""})` : ""}`, disabled: !!why, fn: () => summon(c, "set") });
+  } else {
+    const room = firstEmpty(me.sz) >= 0;
+    if (c.kind === "spell") acts.push({ label: "Activate", primary: true, disabled: !main || !canActivate(c), note: !main ? "Main Phase only" : !canActivate(c) ? "No valid target" : "", fn: () => activateSpell(c, { area: "hand" }) });
+    acts.push({ label: "Set face-down", primary: c.kind === "trap", disabled: !main || !room, note: !main ? "Main Phase only" : !room ? "No free zone" : "", fn: () => setCard(c) });
+  }
+  G.sheet = { card: c, actions: acts };
+  render();
+}
+
+function openMyMonster(i) {
+  const m = ME().mz[i], main = G.phase === "main1" || G.phase === "main2", acts = [];
+  if (G.phase === "battle") {
+    acts.push({ label: OPP().mz.some(Boolean) ? "Attack" : "Attack directly", primary: true, disabled: !canAttack(m),
+      note: G.turn === 1 ? "No attacks on the first turn" : !m.faceUp || m.pos !== "atk" ? "Must be face-up in Attack Position" : m.attacked ? "Already attacked" : "",
+      fn: () => startAttack(i) });
+  } else if (main) {
+    const locked = m.summonTurn === G.turn ? "Summoned this turn" : m.posChanged ? "Already changed this turn" : "";
+    if (!m.faceUp) acts.push({ label: "Flip summon (face-up Attack)", primary: true, disabled: !!locked, note: locked, fn: () => {
+      m.faceUp = true; m.pos = "atk"; m.posChanged = true; log(`${ME().name} flip summons ${m.card.name}.`); checkPitfall(i); } });
+    else acts.push({ label: m.pos === "atk" ? "Switch to Defense" : "Switch to Attack", disabled: !!locked, note: locked, fn: () => {
+      m.pos = m.pos === "atk" ? "def" : "atk"; m.posChanged = true; log(`${m.card.name} switches to ${m.pos === "atk" ? "Attack" : "Defense"} Position.`); } });
+  }
+  G.sheet = { card: m.card, mon: m, actions: acts };
+  render();
+}
+
+function openMySet(i) {
+  const s = ME().sz[i], main = G.phase === "main1" || G.phase === "main2", acts = [];
+  if (s.card.kind === "spell") acts.push({ label: "Activate", primary: true, disabled: !main || !canActivate(s.card), note: !main ? "Main Phase only" : !canActivate(s.card) ? "No valid target" : "", fn: () => activateSpell(s.card, { area: "sz", i }) });
+  G.sheet = { card: s.card, text: s.card.kind === "trap" ? (s.setTurn < G.turn ? "Ready. You'll be asked to spring it when its trigger happens." : "Set this turn. It can be sprung starting next turn.") : "", actions: acts };
+  render();
+}
+
+function onRef(r) {
+  if (G.winner) return;
+  if (G.sel) {
+    if (!G.sel.pickable(r) || G.sel.picks.some(p => p.area === r.area && p.i === r.i && p.side === r.side)) return;
+    G.sel.picks.push(r);
+    if (G.sel.picks.length >= G.sel.count) { const s = G.sel; G.sel = null; s.done(s.picks); }
+    return render();
+  }
+  const me = ME(), opp = OPP();
+  if (r.side === "me") {
+    if (r.area === "hand") return openHandCard(r.i);
+    if (r.area === "mz" && me.mz[r.i]) return openMyMonster(r.i);
+    if (r.area === "sz" && me.sz[r.i]) return openMySet(r.i);
+    if (r.area === "gy") return openGrave(me);
+  } else {
+    if (r.area === "mz" && opp.mz[r.i] && opp.mz[r.i].faceUp) { G.sheet = { card: opp.mz[r.i].card, mon: opp.mz[r.i], actions: [] }; return render(); }
+    if (r.area === "gy") return openGrave(opp);
+  }
+}
+
+function openGrave(p) {
+  G.sheet = { title: `${p.name}'s graveyard`, text: p.gy.length ? "" : "Empty.", list: p.gy.map(c => c.name), actions: [] };
+  render();
+}
+
+// ---------- render ----------
+function cardHTML(c, o = {}) {
+  if (o.back) return `<div class="card back${o.def ? " def" : ""}${o.cls || ""}" ${o.ref ? `data-ref="${o.ref}" tabindex="0"` : ""} aria-label="Face-down card"></div>`;
+  const col = c.kind === "monster" ? ATTR[c.attr] : c.kind === "spell" ? "var(--spell)" : "var(--trap)";
+  const bonus = o.mon && o.mon.bonus ? o.mon.bonus : 0;
+  const body = c.kind === "monster"
+    ? `<div class="lv">${"★".repeat(c.level)}</div><div class="art">${c.attr[0]}</div><div class="st"><span class="${bonus ? "up" : ""}">A ${c.atk + bonus}</span><span>D ${c.def}</span></div>`
+    : `<div class="ty">${c.kind}</div><div class="art">${c.kind === "spell" ? "✦" : "✕"}</div>`;
+  return `<div class="card${o.def ? " def" : ""}${o.cls || ""}" style="--c:${col}" ${o.ref ? `data-ref="${o.ref}" tabindex="0"` : ""} aria-label="${esc(c.name)}"><div class="nm">${esc(c.name)}</div>${body}</div>`;
+}
+
+function picked(side, area, i) { return G.sel && G.sel.picks.some(p => p.side === side && p.area === area && p.i === i); }
+function pickCls(side, area, i) {
+  if (!G.sel) return "";
+  if (picked(side, area, i)) return " done";
+  return G.sel.pickable({ side, area, i }) ? " pick" : "";
+}
+
+function monsterRow(p, side) {
+  return p.mz.map((m, i) => `<div class="zone mz">${m ? cardHTML(m.card, { back: !m.faceUp, def: m.pos === "def", mon: m, ref: `${side}:mz:${i}`, cls: pickCls(side, "mz", i) }) : ""}</div>`).join("")
+    + `<div class="pile" data-ref="${side}:gy:0" tabindex="0">GRAVE<b>${p.gy.length}</b></div>`;
+}
+function spellRow(p, side) {
+  return p.sz.map((s, i) => `<div class="zone">${s ? cardHTML(s.card, { back: true, ref: `${side}:sz:${i}`, cls: pickCls(side, "sz", i) }) : ""}</div>`).join("")
+    + `<div class="pile deck">DECK<b>${p.deck.length}</b></div>`;
+}
+
+function render() {
+  const me = ME(), opp = OPP();
+  const main = G.phase === "main1" || G.phase === "main2";
+  const phaseName = { main1: "Main Phase 1", battle: "Battle Phase", main2: "Main Phase 2" }[G.phase];
+  let html = `
+    <div class="side">
+      <div class="opp-hand" aria-label="${opp.name}'s hand">${opp.hand.map(() => cardHTML(null, { back: true })).join("")}</div>
+      <div class="row">${spellRow(opp, "opp")}</div>
+      <div class="row">${monsterRow(opp, "opp")}</div>
+    </div>
+    <div class="mid">
+      <div class="lp${opp.lp < 2000 ? " hurt" : ""}"><small>${opp.name}</small><span>${opp.lp}</span></div>
+      <div class="center">
+        <div class="phase">Turn ${G.turn} · <b>${phaseName}</b></div>
+        <div class="btns">
+          ${G.phase === "main1" ? `<button data-act="battle" ${G.turn === 1 || G.sel ? "disabled" : ""}>Battle</button>` : ""}
+          ${G.phase === "battle" ? `<button data-act="main2" ${G.sel ? "disabled" : ""}>Main 2</button>` : ""}
+          <button class="primary" data-act="end" ${G.sel ? "disabled" : ""}>End turn</button>
+          <button data-act="log">Log</button>
+          ${G.sel && G.sel.cancel ? `<button data-act="cancel">Cancel</button>` : ""}
+        </div>
+      </div>
+      <div class="lp right${me.lp < 2000 ? " hurt" : ""}"><small>${me.name} · you</small><span>${me.lp}</span></div>
+    </div>
+    <div class="status${G.sel ? " sel" : ""}">${G.sel ? esc(G.sel.prompt) : esc(G.log[G.log.length - 1] || "")}</div>
+    <div class="side">
+      <div class="row">${monsterRow(me, "me")}</div>
+      <div class="row">${spellRow(me, "me")}</div>
+      <div class="hand">${me.hand.map((c, i) => cardHTML(c, { ref: `me:hand:${i}`, cls: pickCls("me", "hand", i) })).join("")}</div>
+    </div>`;
+
+  if (G.sheet) {
+    const s = G.sheet;
+    const detail = s.card ? `<div class="detail">${cardHTML(s.card, { mon: s.mon })}<div style="display:grid;gap:6px">
+        <h2>${esc(s.card.name)}</h2>
+        <p>${s.card.kind === "monster" ? `${s.card.attr} · Level ${s.card.level}<br>ATK ${s.card.atk + (s.mon && s.mon.bonus || 0)} / DEF ${s.card.def}${tributesFor(s.card.level) ? `<br>Needs ${tributesFor(s.card.level)} tribute${tributesFor(s.card.level) > 1 ? "s" : ""} to summon` : ""}` : `${s.card.kind === "spell" ? "Spell" : "Trap"} · ${esc(s.card.text)}`}</p></div></div>` : "";
+    html += `<div class="overlay" data-act="${s.noCancel ? "" : "close"}"><div class="sheet" role="dialog" aria-modal="true">
+      ${s.who ? `<div class="who">${esc(s.who)}, your response</div>` : ""}
+      ${s.title ? `<h2>${esc(s.title)}</h2>` : ""}
+      ${detail}
+      ${s.text ? `<p>${esc(s.text)}</p>` : ""}
+      ${s.list ? (s.list.length ? `<ol>${s.list.map(n => `<li>${esc(n)}</li>`).join("")}</ol>` : "") : ""}
+      <div class="acts">
+        ${s.actions.map((a, k) => `<button data-sheet="${k}" class="${a.primary ? "primary" : ""}" ${a.disabled ? "disabled" : ""}>${esc(a.label)}${a.disabled && a.note ? ` — ${esc(a.note)}` : ""}</button>`).join("")}
+        ${s.noCancel ? "" : `<button data-act="close">Close</button>`}
+      </div></div></div>`;
+  }
+
+  if (G.cover) {
+    html += `<div class="overlay cover" data-act="cover"><div class="sheet">
+      ${G.cover.rules ? `<h1>RELIC DUEL</h1>` : ""}
+      <h2>${esc(G.cover.title)}</h2>
+      <p>${esc(G.cover.text)}</p>
+      ${G.cover.rules ? `<ol class="rules">
+        <li>Each player starts with 8000 Life Points and 5 cards. Draw 1 card at the start of each turn after the first.</li>
+        <li>Summon one monster per turn. Level 5–6 needs 1 tribute; level 7+ needs 2.</li>
+        <li>In the Battle Phase, each face-up Attack Position monster can attack once. No attacks on turn 1.</li>
+        <li>Attack beats Attack: the loser is destroyed and its owner takes the difference. Attacking a Defense monster deals no damage unless its DEF is higher.</li>
+        <li>Traps you set can be sprung on your opponent's next turn. Hand limit is 6.</li>
+        <li>Reduce your opponent to 0 Life Points to win.</li></ol>` : ""}
+      <button class="primary" data-act="cover">I'm ${esc(ME().name)} — show my hand</button>
+    </div></div>`;
+  }
+
+  if (G.winner) {
+    html += `<div class="overlay cover"><div class="sheet">
+      <h1>${esc(G.players[G.winner.i].name)} wins</h1>
+      <p>${esc(G.winner.why)}</p>
+      <button class="primary" data-act="new">New duel</button>
+    </div></div>`;
+  }
+
+  document.getElementById("app").innerHTML = html;
+}
+
+// ---------- input ----------
+document.addEventListener("click", e => {
+  const sheetBtn = e.target.closest("[data-sheet]");
+  if (sheetBtn) {
+    const a = G.sheet.actions[+sheetBtn.dataset.sheet];
+    if (a.disabled) return;
+    G.sheet = null; a.fn(); render(); return;
+  }
+  const act = e.target.closest("[data-act]");
+  if (act && act.dataset.act) {
+    if (act.classList.contains("overlay") && e.target !== act) { /* click inside sheet body */ }
+    else {
+      switch (act.dataset.act) {
+        case "close": G.sheet = null; break;
+        case "cover": G.cover = null; break;
+        case "battle": G.phase = "battle"; log(`${ME().name} enters the Battle Phase.`); break;
+        case "main2": G.phase = "main2"; break;
+        case "end": G.sheet = null; return endTurn();
+        case "cancel": G.sel = null; break;
+        case "new": return newGame();
+        case "log": G.sheet = { title: "Duel log", list: G.log.slice(-25).reverse(), actions: [] }; break;
+      }
+      return render();
+    }
+  }
+  const el = e.target.closest("[data-ref]");
+  if (el && !G.cover && !G.sheet) { const [side, area, i] = el.dataset.ref.split(":"); onRef({ side, area, i: +i }); }
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target.matches && e.target.matches("[data-ref]")) e.target.click();
+  if (e.key === "Escape" && G.sheet && !G.sheet.noCancel) { G.sheet = null; render(); }
+});
+
+window.__duel = { get G() { return G; }, render, onRef, endTurn };
+newGame();
+})();
+</script>
+</body>
+</html>
