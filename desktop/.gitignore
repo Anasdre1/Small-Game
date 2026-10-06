@@ -1,0 +1,4 @@
+node_modules/
+dist/
+game/
+steamworks_sdk/

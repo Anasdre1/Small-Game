@@ -1,0 +1,21 @@
+"AppBuild"
+{
+	"AppID"	"YOUR_APP_ID"
+	"Desc"	"Crosswind 1.0.0"
+	"BuildOutput"	"output\"
+	"ContentRoot"	"..\dist\"
+	"SetLive"	""
+
+	"Depots"
+	{
+		"YOUR_WINDOWS_DEPOT_ID"
+		{
+			"FileMapping"
+			{
+				"LocalPath"	"win-unpacked\*"
+				"DepotPath"	"."
+				"recursive"	"1"
+			}
+		}
+	}
+}

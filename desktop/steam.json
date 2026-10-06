@@ -1,0 +1,5 @@
+{
+  "appId": 480,
+  "leaderboard": "HighScore",
+  "_comment": "Replace 480 (Valve's test app) with your own App ID from Steamworks before you upload."
+}

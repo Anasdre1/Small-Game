@@ -2,7 +2,10 @@
 
 Two small browser games. Each is a single HTML file, so there's nothing to install.
 
-Crosswind is also packaged as an iPhone/iPad and Android app with a worldwide online leaderboard. See [`mobile/PUBLISHING.md`](mobile/PUBLISHING.md) for how to turn on the leaderboard and publish to the App Store and Google Play.
+Crosswind is also packaged for other platforms:
+
+- **Steam (Windows):** `desktop/`, with Steam's built-in leaderboard. See [`desktop/STEAM.md`](desktop/STEAM.md).
+- **iPhone/iPad and Android:** `mobile/`, with a shared online leaderboard on Firebase. See [`mobile/PUBLISHING.md`](mobile/PUBLISHING.md).
 
 ## Crosswind — `index.html`
 

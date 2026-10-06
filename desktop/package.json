@@ -1,0 +1,55 @@
+{
+  "name": "crosswind-desktop",
+  "productName": "Crosswind",
+  "version": "1.0.0",
+  "description": "Crosswind for Steam",
+  "author": "Anas Deree",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "copy-game": "node scripts/copy-game.js",
+    "start": "npm run copy-game && electron .",
+    "dist:win": "npm run copy-game && electron-builder --win dir",
+    "dist:linux": "npm run copy-game && electron-builder --linux dir",
+    "dist": "npm run copy-game && electron-builder --win dir --linux dir"
+  },
+  "build": {
+    "appId": "com.anasdre1.crosswind",
+    "productName": "Crosswind",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "steam.json",
+      "game/**",
+      "node_modules/**",
+      "steamworks_sdk/redistributable_bin/**"
+    ],
+    "asarUnpack": [
+      "node_modules/steamworks-ffi-node/**",
+      "node_modules/koffi/**",
+      "node_modules/@koromix/**",
+      "steamworks_sdk/redistributable_bin/**"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "executableName": "Crosswind"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "executableName": "crosswind",
+      "category": "Game"
+    }
+  },
+  "dependencies": {
+    "steamworks-ffi-node": "^0.11.3"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  },
+  "repository": "github:Anasdre1/Small-Game"
+}
