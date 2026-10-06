@@ -4,7 +4,21 @@ Two small browser games. Each is a single HTML file, so there's nothing to insta
 
 ## Crosswind — `index.html`
 
-Fly a plane through a storm, steer around the lightning cells, and grab fuel cans before the tank runs dry. The storm speeds up the farther you go.
+Fly a plane through a storm. Your guns fire automatically: shoot down enemy aircraft, dodge the lightning cells, and keep your fuel up. You can take 3 hits.
+
+**Enemies** (they unlock as you fly farther):
+- Raiders: fast, fly straight, sometimes in pairs.
+- Weavers: take 2 hits, weave up and down.
+- Gunships: take 5 hits, slow down to fight, and fire 3-shot bursts at you.
+
+**Powerups:**
+- Fuel (F): refills the tank.
+- Shield (S): blocks all hits for 6 seconds.
+- Spread shot (3): fires 3 ways for 8 seconds.
+- Rapid fire (R): fires much faster for 8 seconds.
+- Repair (+): restores 1 hull point.
+
+Score comes from distance, kills and pickups.
 
 | Action | Keyboard | Phone / tablet |
 |---|---|---|

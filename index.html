@@ -14,7 +14,7 @@
     --amber: #ffb23f;      /* cockpit amber — the one accent */
     --ink: #e6edf7;        /* text */
     --dim: #7f93b0;        /* secondary text */
-    --danger: #ff5a5f;     /* low fuel / crash */
+    --danger: #ff5a5f;     /* low fuel / hits */
     --display: "Chakra Petch", "Trebuchet MS", sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
     color-scheme: dark;
@@ -30,31 +30,40 @@
   .hud {
     position: fixed; top: 0; left: 0; right: 0; z-index: 2;
     padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px 10px;
-    display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
+    display: flex; gap: 18px; align-items: center; flex-wrap: wrap;
     background: linear-gradient(var(--panel), transparent);
     font-variant-numeric: tabular-nums; pointer-events: none;
   }
   .gauge { display: flex; flex-direction: column; gap: 2px; }
   .gauge b { font-size: 11px; letter-spacing: .12em; color: var(--dim); font-weight: 400; }
   .gauge span { font-size: 18px; font-weight: 600; color: var(--amber); }
-  .fuel { flex: 1; min-width: 140px; max-width: 260px; }
+  .hull { display: flex; gap: 4px; height: 22px; align-items: center; }
+  .hull i { width: 14px; height: 14px; border: 1.5px solid var(--amber); transform: rotate(45deg); }
+  .hull i.on { background: var(--amber); }
+  .hull.hit i.on { background: var(--danger); border-color: var(--danger); }
+  .fuel { flex: 1; min-width: 120px; max-width: 240px; }
   .bar { height: 8px; border: 1px solid var(--dim); border-radius: 2px; overflow: hidden; }
   .bar i { display: block; height: 100%; width: 100%; background: var(--amber); transition: width .1s linear; }
   .bar.low i { background: var(--danger); }
+  .powers { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pw { font: 600 11px var(--mono); letter-spacing: .08em; padding: 3px 7px; border-radius: 3px; color: #0b1424; }
   .overlay {
     position: fixed; inset: 0; z-index: 3; display: grid; place-items: center; padding: 16px;
     background: color-mix(in srgb, var(--night) 70%, transparent);
   }
   .card {
-    max-width: 380px; width: 100%; padding: 28px 24px; text-align: left;
+    max-width: 400px; width: 100%; padding: 26px 24px; text-align: left;
     background: var(--panel); border: 1px solid #22355a; border-radius: 6px;
-    display: grid; gap: 14px;
+    display: grid; gap: 14px; max-height: 90vh; overflow: auto;
   }
   .card h1 { margin: 0; font-family: var(--display); font-size: 40px; letter-spacing: .04em; color: var(--amber); line-height: 1; }
   .card h2 { margin: 0; font-family: var(--display); font-size: 26px; color: var(--ink); }
   .card p { margin: 0; color: var(--dim); line-height: 1.55; font-size: 13px; }
   .card kbd { font-family: var(--mono); color: var(--ink); border: 1px solid #2c4470; border-radius: 3px; padding: 0 5px; }
-  .stats { display: flex; gap: 24px; font-variant-numeric: tabular-nums; }
+  .legend { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; font-size: 12.5px; color: var(--dim); align-items: center; }
+  .legend .dot { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font: 700 11px var(--mono); color: #0b1424; }
+  .legend .tri { width: 0; height: 0; border-top: 8px solid transparent; border-bottom: 8px solid transparent; border-right: 16px solid var(--danger); }
+  .stats { display: flex; gap: 24px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
   .stats div { display: grid; gap: 2px; }
   .stats b { font-size: 11px; color: var(--dim); letter-spacing: .12em; font-weight: 400; }
   .stats span { font-size: 22px; color: var(--ink); font-weight: 600; }
@@ -70,16 +79,26 @@
 <canvas id="game" aria-label="Crosswind game area"></canvas>
 
 <div class="hud" aria-live="off">
-  <div class="gauge"><b>DIST NM</b><span id="dist">0.0</span></div>
-  <div class="gauge"><b>BEST NM</b><span id="best">0.0</span></div>
+  <div class="gauge"><b>SCORE</b><span id="score">0</span></div>
+  <div class="gauge"><b>BEST</b><span id="best">0</span></div>
+  <div class="gauge"><b>HULL</b><div class="hull" id="hull"></div></div>
   <div class="gauge fuel"><b>FUEL</b><div class="bar" id="fuelBar"><i id="fuelFill"></i></div></div>
+  <div class="powers" id="powers"></div>
 </div>
 
 <div class="overlay" id="start">
   <div class="card">
     <h1>CROSSWIND</h1>
-    <p>Fly through the storm. Steer around the lightning cells and pick up fuel cans before the tank runs dry. The storm gets faster the farther you go.</p>
+    <p>Fly through the storm. Your guns fire on their own; shoot down raiders, dodge the lightning cells, and keep the fuel tank topped up. You can take 3 hits.</p>
     <p>Steer with <kbd>↑</kbd> <kbd>↓</kbd> or <kbd>W</kbd> <kbd>S</kbd>. On a phone, drag up and down anywhere. <kbd>P</kbd> pauses.</p>
+    <div class="legend">
+      <span class="tri"></span><span>Raiders, weavers and gunships. Gunships shoot back.</span>
+      <span class="dot" style="background:#ffb23f">F</span><span>Fuel: refills the tank</span>
+      <span class="dot" style="background:#6fd3ff">S</span><span>Shield: blocks all hits for 6 seconds</span>
+      <span class="dot" style="background:#b98cff">3</span><span>Spread shot: fire 3 ways for 8 seconds</span>
+      <span class="dot" style="background:#7ce38b">R</span><span>Rapid fire for 8 seconds</span>
+      <span class="dot" style="background:#ff8fa3">+</span><span>Repair: restores 1 hull point</span>
+    </div>
     <button id="startBtn">Take off</button>
   </div>
 </div>
@@ -89,8 +108,10 @@
     <h2 id="overTitle">Flight over</h2>
     <p id="overReason"></p>
     <div class="stats">
-      <div><b>DISTANCE</b><span id="finalDist">0.0 nm</span></div>
-      <div><b>BEST</b><span id="finalBest">0.0 nm</span></div>
+      <div><b>SCORE</b><span id="finalScore">0</span></div>
+      <div><b>BEST</b><span id="finalBest">0</span></div>
+      <div><b>KILLS</b><span id="finalKills">0</span></div>
+      <div><b>DISTANCE</b><span id="finalDist">0 nm</span></div>
     </div>
     <button id="againBtn">Fly again</button>
   </div>
@@ -112,53 +133,72 @@
   }
   addEventListener('resize', resize); resize();
 
-  const load = k => { try { return parseFloat(localStorage.getItem(k)) || 0; } catch { return 0; } };
+  const load = k => { try { return parseInt(localStorage.getItem(k)) || 0; } catch { return 0; } };
   const save = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+  let best = load('crosswind-best-score');
+  $('best').textContent = best;
 
-  let best = load('crosswind-best');
-  $('best').textContent = best.toFixed(1);
+  const MAX_HULL = 3;
+  const POWER = {
+    fuel:   { color: '#ffb23f', label: 'F' },
+    shield: { color: '#6fd3ff', label: 'S', time: 6,  name: 'SHIELD' },
+    spread: { color: '#b98cff', label: '3', time: 8,  name: 'SPREAD' },
+    rapid:  { color: '#7ce38b', label: 'R', time: 8,  name: 'RAPID' },
+    repair: { color: '#ff8fa3', label: '+' },
+  };
+  const ENEMY = {
+    raider:  { r: 14, hp: 1, pts: 50,  color: '#ff5a5f' },
+    weaver:  { r: 15, hp: 2, pts: 80,  color: '#ff8a3d' },
+    gunship: { r: 24, hp: 5, pts: 200, color: '#d94a8c' },
+  };
 
   // ---- state ----
-  let state = 'menu', plane, storms, cans, stars, rain, dist, fuel, speed, spawnT, canT, last, flash;
+  let state = 'menu', plane, storms, enemies, shots, eshots, pickups, parts, stars, rain;
+  let dist, fuel, hull, speed, kills, bonus, timers, powers, invuln, flash, hurt, shake, last;
   const keys = {};
   let touchY = null;
 
   function reset() {
-    plane = { x: Math.max(70, W * 0.18), y: H / 2, vy: 0, r: 16 };
-    storms = []; cans = [];
+    plane = { x: Math.max(70, W * 0.16), y: H / 2, vy: 0, r: 14 };
+    storms = []; enemies = []; shots = []; eshots = []; pickups = []; parts = [];
     stars = Array.from({ length: 70 }, () => ({ x: Math.random() * W, y: Math.random() * H, s: Math.random() * 1.5 + 0.3 }));
     rain = Array.from({ length: reduceMotion ? 0 : 90 }, () => ({ x: Math.random() * W, y: Math.random() * H, l: Math.random() * 12 + 6 }));
-    dist = 0; fuel = 100; speed = 220; spawnT = 0.6; canT = 2.5; flash = 0;
+    dist = 0; fuel = 100; hull = MAX_HULL; speed = 220; kills = 0; bonus = 0;
+    timers = { storm: 1.2, enemy: 3, pickup: 5, fire: 0 };
+    powers = { shield: 0, spread: 0, rapid: 0 };
+    invuln = 0; flash = null; hurt = 0; shake = 0;
   }
+  const score = () => Math.floor(dist * 10) + bonus;
 
   function start() {
     reset(); state = 'play';
     $('start').hidden = true; $('over').hidden = true;
     last = performance.now();
-    cv.focus?.();
   }
 
   function end(reason) {
     state = 'over';
-    if (dist > best) { best = dist; save('crosswind-best', best.toFixed(2)); }
-    $('best').textContent = best.toFixed(1);
-    $('overTitle').textContent = reason === 'fuel' ? 'Out of fuel' : 'Hit by lightning';
+    const s = score();
+    if (s > best) { best = s; save('crosswind-best-score', best); }
+    $('best').textContent = best;
+    $('overTitle').textContent = reason === 'fuel' ? 'Out of fuel' : 'Shot down';
     $('overReason').textContent = reason === 'fuel'
       ? 'The engine quit. Grab the amber fuel cans sooner next time.'
-      : 'You flew into a storm cell. Give the flashing cells more room.';
+      : 'Your hull gave out. Shields and repair kits keep you in the air longer.';
+    $('finalScore').textContent = s;
+    $('finalBest').textContent = best;
+    $('finalKills').textContent = kills;
     $('finalDist').textContent = dist.toFixed(1) + ' nm';
-    $('finalBest').textContent = best.toFixed(1) + ' nm';
     $('over').hidden = false;
     $('againBtn').focus();
   }
 
   // ---- input ----
   addEventListener('keydown', e => {
-    keys[e.key.toLowerCase()] = true;
-    if (['arrowup', 'arrowdown', ' '].includes(e.key.toLowerCase())) e.preventDefault();
-    if (e.key.toLowerCase() === 'p' && (state === 'play' || state === 'pause')) {
-      state = state === 'play' ? 'pause' : 'play'; last = performance.now();
-    }
+    const k = e.key.toLowerCase();
+    keys[k] = true;
+    if (['arrowup', 'arrowdown', ' '].includes(k)) e.preventDefault();
+    if (k === 'p' && (state === 'play' || state === 'pause')) { state = state === 'play' ? 'pause' : 'play'; last = performance.now(); }
     if (e.key === 'Enter' && state !== 'play' && state !== 'pause') start();
   });
   addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
@@ -169,12 +209,56 @@
   $('againBtn').onclick = start;
 
   // ---- spawning ----
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const top = () => 80;
+
   function spawnStorm() {
-    const r = 22 + Math.random() * 30;
-    storms.push({ x: W + r, y: 60 + Math.random() * (H - 100), r, ph: Math.random() * 6, vy: (Math.random() - 0.5) * 40 });
+    const r = rand(22, 50);
+    storms.push({ x: W + r, y: rand(top() + 10, H - 40), r, ph: Math.random() * 6, vy: rand(-20, 20) });
   }
-  function spawnCan() {
-    cans.push({ x: W + 20, y: 70 + Math.random() * (H - 120), bob: Math.random() * 6 });
+  function spawnEnemy() {
+    const pool = ['raider'];
+    if (dist > 3) pool.push('weaver', 'weaver');
+    if (dist > 8) pool.push('gunship');
+    const type = pool[Math.floor(Math.random() * pool.length)];
+    const d = ENEMY[type];
+    const y = rand(top() + 20, H - 50);
+    const e = { type, x: W + 40, y, baseY: y, hp: d.hp, r: d.r, t: Math.random() * 6, fireT: rand(0.8, 1.6), hitFlash: 0 };
+    enemies.push(e);
+    if (type === 'raider' && Math.random() < Math.min(0.6, dist / 20)) {     // raiders sometimes fly in pairs
+      enemies.push({ ...e, y: e.y + (e.y > H / 2 ? -46 : 46), baseY: e.baseY, x: e.x + 40 });
+    }
+  }
+  function spawnPickup(type, x, y) {
+    if (!type) {
+      const r = Math.random();
+      type = fuel < 45 && r < 0.45 ? 'fuel' : r < 0.3 ? 'fuel' : r < 0.5 ? 'shield' : r < 0.68 ? 'spread' : r < 0.86 ? 'rapid' : 'repair';
+      if (type === 'repair' && hull === MAX_HULL) type = 'fuel';
+    }
+    pickups.push({ type, x: x ?? W + 20, y: y ?? rand(top() + 10, H - 40), bob: Math.random() * 6 });
+  }
+  function burst(x, y, color, n = 16) {
+    if (reduceMotion) n = Math.ceil(n / 3);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, s = rand(60, 260);
+      parts.push({ x, y, vx: Math.cos(a) * s - speed * 0.3, vy: Math.sin(a) * s, life: rand(0.3, 0.7), max: 0.7, color });
+    }
+  }
+
+  function takeHit() {
+    if (invuln > 0 || powers.shield > 0) return false;
+    hull--; invuln = 1.4; hurt = 0.35; shake = reduceMotion ? 0 : 0.25;
+    burst(plane.x, plane.y, '#ff5a5f', 12);
+    if (hull <= 0) { end('hull'); return true; }
+    return false;
+  }
+
+  function collect(p) {
+    if (p.type === 'fuel') fuel = Math.min(100, fuel + 30);
+    else if (p.type === 'repair') hull = Math.min(MAX_HULL, hull + 1);
+    else powers[p.type] = POWER[p.type].time;
+    flash = { color: POWER[p.type].color, t: 0.22 };
+    bonus += 10;
   }
 
   // ---- update ----
@@ -183,59 +267,140 @@
     let dir = 0;
     if (keys['arrowup'] || keys['w']) dir -= 1;
     if (keys['arrowdown'] || keys['s']) dir += 1;
-    if (touchY !== null) {
-      const d = touchY - plane.y;
-      dir = Math.max(-1, Math.min(1, d / 60));
-    }
+    if (touchY !== null) dir = Math.max(-1, Math.min(1, (touchY - plane.y) / 60));
     plane.vy += dir * 1600 * dt;
-    plane.vy *= Math.pow(0.02, dt);              // drag
+    plane.vy *= Math.pow(0.02, dt);
     plane.y += plane.vy * dt;
-    const top = 70;
-    if (plane.y < top) { plane.y = top; plane.vy = 0; }
+    if (plane.y < top()) { plane.y = top(); plane.vy = 0; }
     if (plane.y > H - 20) { plane.y = H - 20; plane.vy = 0; }
 
     // progress
-    speed += 6 * dt;                               // storm speeds up
-    dist += speed * dt / 900;                      // ~nautical miles, arcade scale
-    fuel -= (6 + speed / 120) * dt;
+    speed += 5 * dt;
+    dist += speed * dt / 900;
+    fuel -= (3.5 + speed / 200) * dt;
     if (fuel <= 0) { fuel = 0; return end('fuel'); }
+    for (const k in powers) powers[k] = Math.max(0, powers[k] - dt);
+    invuln = Math.max(0, invuln - dt); hurt = Math.max(0, hurt - dt); shake = Math.max(0, shake - dt);
+    if (flash && (flash.t -= dt) <= 0) flash = null;
 
-    spawnT -= dt;
-    if (spawnT <= 0) { spawnStorm(); spawnT = Math.max(0.35, 1.1 - speed / 900) * (0.6 + Math.random() * 0.8); }
-    canT -= dt;
-    if (canT <= 0) { spawnCan(); canT = 2.2 + Math.random() * 2; }
-
-    for (const s of storms) {
-      s.x -= speed * dt; s.y += s.vy * dt; s.ph += dt * 6;
-      if (s.y < 60 || s.y > H - 20) s.vy *= -1;
-      const dx = s.x - plane.x, dy = s.y - plane.y;
-      if (Math.hypot(dx, dy) < s.r * 0.78 + plane.r * 0.7) return end('storm');
+    // guns
+    timers.fire -= dt;
+    if (timers.fire <= 0) {
+      timers.fire = powers.rapid > 0 ? 0.08 : 0.2;
+      const angles = powers.spread > 0 ? [-0.2, 0, 0.2] : [0];
+      for (const a of angles) shots.push({ x: plane.x + 22, y: plane.y, vx: Math.cos(a) * 720, vy: Math.sin(a) * 720 });
     }
-    for (const c of cans) {
-      c.x -= speed * dt; c.bob += dt * 4;
-      if (!c.got && Math.hypot(c.x - plane.x, c.y + Math.sin(c.bob) * 4 - plane.y) < 26) {
-        c.got = true; fuel = Math.min(100, fuel + 28); flash = 0.25;
+
+    // spawns
+    if ((timers.storm -= dt) <= 0) { spawnStorm(); timers.storm = Math.max(0.9, 2.2 - dist / 25) * rand(0.6, 1.4); }
+    if ((timers.enemy -= dt) <= 0) { spawnEnemy(); timers.enemy = Math.max(0.55, 1.8 - dist / 20) * rand(0.6, 1.3); }
+    if ((timers.pickup -= dt) <= 0) { spawnPickup(); timers.pickup = rand(3.5, 6); }
+
+    // player shots
+    for (const s of shots) { s.x += s.vx * dt; s.y += s.vy * dt; }
+    shots = shots.filter(s => s.x < W + 20 && s.y > 0 && s.y < H && !s.dead);
+
+    // enemies
+    for (const e of enemies) {
+      e.t += dt;
+      if (e.hitFlash > 0) e.hitFlash -= dt;
+      if (e.type === 'raider') { e.x -= (speed + 170) * dt; }
+      else if (e.type === 'weaver') { e.x -= (speed + 60) * dt; e.y = e.baseY + Math.sin(e.t * 3) * 70; }
+      else {
+        e.x -= (e.x > W * 0.72 ? speed * 0.9 : speed * 0.18) * dt;           // gunship slows down to fight
+        e.y += Math.sign(plane.y - e.y) * Math.min(60, Math.abs(plane.y - e.y)) * dt;
+        if ((e.fireT -= dt) <= 0 && e.x < W - 20) {
+          e.fireT = 1.5;
+          const a = Math.atan2(plane.y - e.y, plane.x - e.x);
+          for (const off of [-0.12, 0, 0.12]) eshots.push({ x: e.x - 20, y: e.y, vx: Math.cos(a + off) * 260, vy: Math.sin(a + off) * 260 });
+        }
+      }
+      e.y = Math.max(top(), Math.min(H - 20, e.y));
+      for (const s of shots) {
+        if (!s.dead && Math.hypot(s.x - e.x, s.y - e.y) < e.r + 4) {
+          s.dead = true; e.hp--; e.hitFlash = 0.08;
+          if (e.hp <= 0 && !e.dead) {
+            e.dead = true; kills++; bonus += ENEMY[e.type].pts;
+            burst(e.x, e.y, ENEMY[e.type].color, e.type === 'gunship' ? 30 : 16);
+            if (Math.random() < (e.type === 'gunship' ? 0.9 : 0.18)) spawnPickup(null, e.x, e.y);
+          }
+        }
+      }
+      if (!e.dead && Math.hypot(e.x - plane.x, e.y - plane.y) < e.r + plane.r * 0.8) {
+        if (powers.shield > 0 || invuln <= 0) { e.dead = true; burst(e.x, e.y, ENEMY[e.type].color); }
+        if (takeHit()) return;
       }
     }
-    storms = storms.filter(s => s.x > -s.r - 10);
-    cans = cans.filter(c => c.x > -30 && !c.got);
+    enemies = enemies.filter(e => !e.dead && e.x > -60);
 
+    // enemy shots
+    for (const b of eshots) {
+      b.x += b.vx * dt; b.y += b.vy * dt;
+      if (Math.hypot(b.x - plane.x, b.y - plane.y) < plane.r) { b.dead = true; if (takeHit()) return; }
+    }
+    eshots = eshots.filter(b => !b.dead && b.x > -10 && b.x < W + 10 && b.y > 0 && b.y < H);
+
+    // storms (can't be shot)
+    for (const s of storms) {
+      s.x -= speed * dt; s.y += s.vy * dt; s.ph += dt * 6;
+      if (s.y < top() || s.y > H - 20) s.vy *= -1;
+      for (const sh of shots) if (!sh.dead && Math.hypot(sh.x - s.x, sh.y - s.y) < s.r * 0.6) sh.dead = true;
+      if (Math.hypot(s.x - plane.x, s.y - plane.y) < s.r * 0.75 + plane.r * 0.7) { if (takeHit()) return; }
+    }
+    storms = storms.filter(s => s.x > -s.r - 10);
+
+    // pickups
+    for (const p of pickups) {
+      p.x -= speed * 0.85 * dt; p.bob += dt * 4;
+      if (!p.got && Math.hypot(p.x - plane.x, p.y + Math.sin(p.bob) * 4 - plane.y) < 28) { p.got = true; collect(p); }
+    }
+    pickups = pickups.filter(p => p.x > -30 && !p.got);
+
+    // particles & scenery
+    for (const q of parts) { q.x += q.vx * dt; q.y += q.vy * dt; q.life -= dt; }
+    parts = parts.filter(q => q.life > 0);
     for (const st of stars) { st.x -= st.s * speed * 0.05 * dt; if (st.x < 0) { st.x = W; st.y = Math.random() * H; } }
     for (const d of rain) { d.x -= speed * 1.4 * dt; d.y += 260 * dt; if (d.x < 0 || d.y > H) { d.x = Math.random() * W + 40; d.y = -10; } }
-    if (flash > 0) flash -= dt;
   }
 
   // ---- draw ----
   function drawPlane(x, y, tilt) {
+    if (invuln > 0 && Math.floor(invuln * 12) % 2 === 0) return;      // blink while recovering
     ctx.save(); ctx.translate(x, y); ctx.rotate(tilt);
     ctx.fillStyle = '#e6edf7';
-    ctx.beginPath(); ctx.ellipse(0, 0, 22, 6, 0, 0, Math.PI * 2); ctx.fill();          // fuselage
-    ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(-12, -18); ctx.lineTo(-4, -18); ctx.lineTo(6, 0); ctx.closePath(); ctx.fill(); // wing
+    ctx.beginPath(); ctx.ellipse(0, 0, 22, 6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(-12, -18); ctx.lineTo(-4, -18); ctx.lineTo(6, 0); ctx.closePath(); ctx.fill();
     ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(-12, 18); ctx.lineTo(-4, 18); ctx.lineTo(6, 0); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(-18, 0); ctx.lineTo(-24, -9); ctx.lineTo(-20, -9); ctx.lineTo(-14, 0); ctx.closePath(); ctx.fill(); // tail
-    ctx.fillStyle = '#ffb23f'; ctx.fillRect(10, -2, 6, 4);                              // cockpit
+    ctx.beginPath(); ctx.moveTo(-18, 0); ctx.lineTo(-24, -9); ctx.lineTo(-20, -9); ctx.lineTo(-14, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ffb23f'; ctx.fillRect(10, -2, 6, 4);
     ctx.fillStyle = 'rgba(255,90,95,' + (0.5 + 0.5 * Math.sin(performance.now() / 120)) + ')';
-    ctx.beginPath(); ctx.arc(-11, -17, 2, 0, Math.PI * 2); ctx.fill();                 // nav light
+    ctx.beginPath(); ctx.arc(-11, -17, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    if (powers.shield > 0) {
+      const fade = powers.shield < 1.5 ? (Math.floor(powers.shield * 8) % 2 ? 0.25 : 0.7) : 0.7;
+      ctx.strokeStyle = `rgba(111,211,255,${fade})`; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(x, y, 30, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = 'rgba(111,211,255,.08)'; ctx.fill();
+    }
+  }
+
+  function drawEnemy(e) {
+    const d = ENEMY[e.type];
+    ctx.save(); ctx.translate(e.x, e.y);
+    ctx.fillStyle = e.hitFlash > 0 ? '#ffffff' : d.color;
+    if (e.type === 'raider') {
+      ctx.beginPath(); ctx.moveTo(-16, 0); ctx.lineTo(12, -12); ctx.lineTo(6, 0); ctx.lineTo(12, 12); ctx.closePath(); ctx.fill();
+    } else if (e.type === 'weaver') {
+      ctx.rotate(Math.cos(e.t * 3) * 0.4);
+      ctx.beginPath(); ctx.moveTo(-17, 0); ctx.lineTo(4, -15); ctx.lineTo(14, -4); ctx.lineTo(14, 4); ctx.lineTo(4, 15); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#0b1424'; ctx.beginPath(); ctx.arc(2, 0, 4, 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.beginPath(); ctx.ellipse(0, 0, 28, 13, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(-6, -24, 10, 48);
+      ctx.fillStyle = '#0b1424'; ctx.fillRect(-26, -3, 12, 6);
+      // health pips
+      for (let i = 0; i < ENEMY.gunship.hp; i++) { ctx.fillStyle = i < e.hp ? '#ffb23f' : '#2c4470'; ctx.fillRect(-15 + i * 6, -32, 4, 4); }
+    }
     ctx.restore();
   }
 
@@ -245,50 +410,69 @@
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#3a4c70';
     for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(s.x + (i - 1) * s.r * 0.4, s.y + Math.sin(i * 2) * 4, s.r * 0.45, 0, Math.PI * 2); ctx.fill(); }
-    if (Math.sin(s.ph) > 0.85) {                                                       // lightning
+    if (Math.sin(s.ph) > 0.85) {
       ctx.strokeStyle = '#fff4c2'; ctx.lineWidth = 2; ctx.beginPath();
-      let lx = s.x, ly = s.y;
-      ctx.moveTo(lx, ly);
+      let lx = s.x, ly = s.y; ctx.moveTo(lx, ly);
       for (let i = 0; i < 4; i++) { lx += (Math.random() - 0.5) * 14; ly += s.r * 0.3; ctx.lineTo(lx, ly); }
       ctx.stroke();
     }
   }
 
-  function drawCan(c) {
-    const y = c.y + Math.sin(c.bob) * 4;
-    ctx.save(); ctx.translate(c.x, y);
-    ctx.shadowColor = '#ffb23f'; ctx.shadowBlur = 14;
-    ctx.fillStyle = '#ffb23f'; ctx.fillRect(-8, -10, 16, 20);
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#1a1205'; ctx.font = '700 9px "IBM Plex Mono", monospace'; ctx.textAlign = 'center';
-    ctx.fillText('JET', 0, 3);
-    ctx.fillRect(-3, -13, 6, 3);
+  function drawPickup(p) {
+    const y = p.y + Math.sin(p.bob) * 4, c = POWER[p.type];
+    ctx.save(); ctx.translate(p.x, y);
+    ctx.shadowColor = c.color; ctx.shadowBlur = 16;
+    ctx.fillStyle = c.color;
+    if (p.type === 'fuel') { ctx.fillRect(-9, -11, 18, 22); ctx.shadowBlur = 0; ctx.fillStyle = '#1a1205'; ctx.fillRect(-3, -14, 6, 3); }
+    else { ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0; }
+    ctx.fillStyle = '#0b1424'; ctx.font = '700 12px "IBM Plex Mono", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(p.type === 'fuel' ? 'F' : c.label, 0, 1);
     ctx.restore();
   }
 
   function draw() {
-    ctx.fillStyle = '#0b1424'; ctx.fillRect(0, 0, W, H);
+    ctx.save();
+    if (shake > 0) ctx.translate((Math.random() - 0.5) * 10 * shake * 4, (Math.random() - 0.5) * 10 * shake * 4);
+    ctx.fillStyle = '#0b1424'; ctx.fillRect(-20, -20, W + 40, H + 40);
     ctx.fillStyle = '#9fb3d1';
     for (const st of stars) ctx.fillRect(st.x, st.y, st.s, st.s);
     ctx.strokeStyle = 'rgba(159,179,209,.25)'; ctx.lineWidth = 1; ctx.beginPath();
     for (const d of rain) { ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - d.l * 0.6, d.y + d.l); }
     ctx.stroke();
-    for (const c of cans) drawCan(c);
+    for (const p of pickups) drawPickup(p);
     for (const s of storms) drawStorm(s);
+    ctx.fillStyle = '#ffe08a';
+    for (const s of shots) ctx.fillRect(s.x - 6, s.y - 1.5, 12, 3);
+    ctx.fillStyle = '#ff5a5f';
+    for (const b of eshots) { ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI * 2); ctx.fill(); }
+    for (const e of enemies) drawEnemy(e);
     drawPlane(plane.x, plane.y, Math.max(-0.4, Math.min(0.4, plane.vy / 900)));
-    if (flash > 0) { ctx.fillStyle = `rgba(255,178,63,${flash})`; ctx.fillRect(0, 0, W, H); }
+    for (const q of parts) { ctx.globalAlpha = Math.max(0, q.life / q.max); ctx.fillStyle = q.color; ctx.fillRect(q.x - 2, q.y - 2, 4, 4); }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    if (flash) { ctx.globalAlpha = flash.t; ctx.fillStyle = flash.color; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+    if (hurt > 0) { ctx.globalAlpha = hurt; ctx.fillStyle = '#ff5a5f'; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
     if (state === 'pause') {
       ctx.fillStyle = 'rgba(11,20,36,.6)'; ctx.fillRect(0, 0, W, H);
-      ctx.fillStyle = '#ffb23f'; ctx.font = '700 32px "Chakra Petch", sans-serif'; ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffb23f'; ctx.font = '700 32px "Chakra Petch", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
       ctx.fillText('PAUSED', W / 2, H / 2); ctx.font = '13px "IBM Plex Mono", monospace'; ctx.fillStyle = '#7f93b0';
       ctx.fillText('Press P to resume', W / 2, H / 2 + 28);
     }
   }
 
+  let lastHud = '';
   function hud() {
-    $('dist').textContent = dist.toFixed(1);
+    $('score').textContent = score();
     $('fuelFill').style.width = fuel + '%';
     $('fuelBar').classList.toggle('low', fuel < 25);
+    const key = hull + '|' + (hurt > 0) + '|' + Object.entries(powers).map(([k, v]) => k + Math.ceil(v)).join();
+    if (key !== lastHud) {
+      lastHud = key;
+      $('hull').innerHTML = Array.from({ length: MAX_HULL }, (_, i) => `<i class="${i < hull ? 'on' : ''}"></i>`).join('');
+      $('hull').classList.toggle('hit', hurt > 0);
+      $('powers').innerHTML = Object.entries(powers).filter(([, v]) => v > 0)
+        .map(([k, v]) => `<span class="pw" style="background:${POWER[k].color}">${POWER[k].name} ${Math.ceil(v)}</span>`).join('');
+    }
   }
 
   function loop(now) {
@@ -298,6 +482,7 @@
     requestAnimationFrame(loop);
   }
 
+  window.__cw = { get s() { return { state, hull, fuel, kills, enemies: enemies.length, pickups: pickups.length, score: score(), dist, powers }; }, give: t => collect({ type: t }) };
   reset(); last = performance.now(); requestAnimationFrame(loop);
 })();
 </script>
